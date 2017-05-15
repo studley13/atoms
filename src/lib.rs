@@ -19,6 +19,7 @@ use std::str::{self, FromStr};
 #[allow(missing_docs)]
 pub enum Atom {
   S(String),
+  Sym(String),
   I(i64),
   F(f64),
 }
@@ -146,7 +147,7 @@ fn atom_of_string(s: String) -> Atom {
     Err(_) => {},
   };
 
-  Atom::S(s)
+  Atom::Sym(s)
 }
 
 // returns the char it found, and the new size if you wish to consume that char
@@ -285,6 +286,11 @@ pub fn atom_s(s: &str) -> Sexp {
   Sexp::Atom(Atom::S(s.to_owned()))
 }
 
+/// Constructs an atomic s-expression from a string.
+pub fn atom_sym(s: &str) -> Sexp {
+  Sexp::Atom(Atom::Sym(s.to_owned()))
+}
+
 /// Constructs an atomic s-expression from an int.
 pub fn atom_i(i: i64) -> Sexp {
   Sexp::Atom(Atom::I(i))
@@ -308,39 +314,18 @@ pub fn parse(s: &str) -> Result<Sexp, Box<Error>> {
   if pos == s.len() { Ok(ret) } else { err("unrecognized post-s-expression data", s, &pos) }
 }
 
-// TODO: Pretty print in lisp convention, instead of all on the same line,
-// packed as tightly as possible. It's kinda ugly.
-
-fn is_num_string(s: &str) -> bool {
-  let x: Result<i64, _> = FromStr::from_str(&s);
-  let y: Result<f64, _> = FromStr::from_str(&s);
-  x.is_ok() || y.is_ok()
-}
-
-fn string_contains_whitespace(s: &str) -> bool {
-  for c in s.chars() {
-    if c.is_whitespace() { return true }
-  }
-  false
-}
-
 fn quote(s: &str) -> Cow<str> {
-  if !s.contains("\"")
-  && !string_contains_whitespace(s)
-  && !is_num_string(s) {
-    Cow::Borrowed(s)
-  } else {
-    let mut r: String = "\"".to_string();
-    r.push_str(&s.replace("\\", "\\\\").replace("\"", "\\\""));
-    r.push_str("\"");
-    Cow::Owned(r)
-  }
+  let mut r: String = "\"".to_string();
+  r.push_str(&s.replace("\\", "\\\\").replace("\"", "\\\""));
+  r.push_str("\"");
+  Cow::Owned(r)
 }
 
 impl fmt::Display for Atom {
   fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
     match *self {
       Atom::S(ref s) => write!(f, "{}", quote(s)),
+      Atom::Sym(ref s) => write!(f, "{}", s),
       Atom::I(i)     => write!(f, "{}", i),
       Atom::F(d)     => write!(f, "{}", d),
     }
@@ -379,7 +364,7 @@ impl fmt::Debug for Sexp {
 fn test_hello_world() {
   assert_eq!(
     parse("(hello -42\n\t  -4.0 \"world\") ; comment").unwrap(),
-    list(&[ atom_s("hello"), atom_i(-42), atom_f(-4.0), atom_s("world") ]));
+    list(&[ atom_sym("hello"), atom_i(-42), atom_f(-4.0), atom_s("world") ]));
 }
 
 #[test]
@@ -401,8 +386,8 @@ fn test_pp() {
 fn test_tight_parens() {
     let s = "(hello(world))";
     let sexp = parse(s).unwrap();
-    assert_eq!(sexp, Sexp::List(vec![Sexp::Atom(Atom::S("hello".into())),
-                                     Sexp::List(vec![Sexp::Atom(Atom::S("world".into()))])]));
+    assert_eq!(sexp, Sexp::List(vec![Sexp::Atom(Atom::Sym("hello".into())),
+                                     Sexp::List(vec![Sexp::Atom(Atom::Sym("world".into()))])]));
     let s = "(this (has)tight(parens))";
     let s2 = "( this ( has ) tight ( parens ) )";
     assert_eq!(parse(s).unwrap(), parse(s2).unwrap());
@@ -415,3 +400,68 @@ fn test_space_in_atom() {
   assert_eq!("(\"hello world\")", sexp_as_string);
   assert_eq!(sexp, parse(&sexp_as_string).unwrap());
 }
+
+#[allow(missing_docs)]
+pub fn unwrap_atom_s(sexp: &Sexp) ->  Option<String> {
+    match *sexp {
+        Sexp::Atom(Atom::S(ref s)) => Some(s.clone()),
+        Sexp::Atom(Atom::Sym(_)) => None,
+        Sexp::Atom(Atom::I(_)) => None,
+        Sexp::Atom(Atom::F(_)) => None,
+        Sexp::List(_) => None,
+    }
+}
+
+#[allow(missing_docs)]
+pub fn unwrap_atom_sym(sexp: &Sexp) ->  Option<String> {
+    match *sexp {
+        Sexp::Atom(Atom::S(_)) => None,
+        Sexp::Atom(Atom::Sym(ref s)) => Some(s.clone()),
+        Sexp::Atom(Atom::I(_)) => None,
+        Sexp::Atom(Atom::F(_)) => None,
+        Sexp::List(_) => None,
+    }
+}
+
+#[allow(missing_docs)]
+pub fn unwrap_atom_i(sexp: &Sexp) ->  Option<i64> {
+    match *sexp {
+        Sexp::Atom(Atom::S(_)) => None,
+        Sexp::Atom(Atom::Sym(_)) => None,
+        Sexp::Atom(Atom::I(i)) => Some(i.clone()),
+        Sexp::Atom(Atom::F(_)) => None,
+        Sexp::List(_) => None,
+    }
+}
+
+#[allow(missing_docs)]
+pub fn unwrap_atom_f(sexp: &Sexp) ->  Option<f64> {
+    match *sexp {
+        Sexp::Atom(Atom::S(_)) => None,
+        Sexp::Atom(Atom::Sym(_)) => None,
+        Sexp::Atom(Atom::I(_)) => None,
+        Sexp::Atom(Atom::F(f)) => Some(f.clone()),
+        Sexp::List(_) => None,
+    }
+}
+
+#[allow(missing_docs)]
+pub fn unwrap_list (sexp: &Sexp) -> Option<Vec<Sexp>> {
+    match *sexp {
+        Sexp::Atom(Atom::S(_)) => None,
+        Sexp::Atom(Atom::Sym(_)) => None,
+        Sexp::Atom(Atom::I(_)) => None,
+        Sexp::Atom(Atom::F(_)) => None,
+        Sexp::List(ref v) => Some(v.clone()),
+    }
+}
+
+#[test]
+fn test_unwrap() {
+  assert_eq!(Some(3), unwrap_atom_i(&atom_i(3)));
+  assert_eq!(Some(3.0), unwrap_atom_f(&atom_f(3.0)));
+  assert_eq!(Some("a".to_string()), unwrap_atom_s(&atom_s("a")));
+  assert_eq!(Some("a".to_string()), unwrap_atom_sym(&atom_sym("a")));
+  assert_eq!(Some(vec![atom_i(3)]), unwrap_list(&list(&[atom_i(3)])));
+}
+
