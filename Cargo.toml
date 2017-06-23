@@ -1,16 +1,15 @@
 [package]
-name = "sexp"
+name = "atoms"
 version = "1.1.4"
-authors = ["Clark Gaebel <cg.wowus.cg@gmail.com>"]
+authors = ["Curtis Millar <curtis@curtism.me>", "Clark Gaebel <cg.wowus.cg@gmail.com>"]
 
-documentation = "https://cgaebel.github.io/sexp"
-homepage      = "https://github.com/cgaebel/sexp"
-repository    = "https://github.com/cgaebel/sexp"
+documentation = "https://docs.rs/atoms"
+repository    = "https://github.com/studley13/atoms"
 
 readme = "README.md"
 
-keywords = [ "sexp", "parsing", "s-expression", "file-format" ]
+keywords = [ "atom", "sexp", "parsing", "s-expression", "file-format" ]
 
-description = "A small, simple, self-contained, s-expression parser and pretty-printer."
+description = "S-expression parser and pretty-printer."
 
 license = "MIT"
