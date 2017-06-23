@@ -5,6 +5,8 @@
 #![deny(missing_docs)]
 #![deny(unsafe_code)]
 
+use error::{Error, ParseResult};
+
 use std::borrow::Cow;
 use std::cmp;
 use std::error;
@@ -33,107 +35,8 @@ pub enum Sexp {
   List(Vec<Sexp>),
 }
 
-#[test]
-fn sexp_size() {
-  // I just want to see when this changes, in the diff.
-  use std::mem;
-  assert_eq!(mem::size_of::<Sexp>(), mem::size_of::<isize>()*5);
-}
-
-/// The representation of an s-expression parse error.
-pub struct Error {
-  /// The error message.
-  pub message: &'static str,
-  /// The line number on which the error occurred.
-  pub line:    usize,
-  /// The column number on which the error occurred.
-  pub column:  usize,
-  /// The index in the given string which caused the error.
-  pub index:   usize,
-}
-
-impl error::Error for Error {
-  fn description(&self) -> &str { self.message }
-  fn cause(&self) -> Option<&error::Error> { None }
-}
-
-/// Since errors are the uncommon case, they're boxed. This keeps the size of
-/// structs down, which helps performance in the common case.
-///
-/// For example, an `ERes<()>` becomes 8 bytes, instead of the 24 bytes it would
-/// be if `Err` were unboxed.
-type Err = Box<Error>;
-
-/// Helps clean up type signatures, but shouldn't be exposed to the outside
-/// world.
-type ERes<T> = Result<T, Err>;
-
-impl fmt::Display for Error {
-  fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-    write!(f, "{}:{}: {}", self.line, self.column, self.message)
-  }
-}
-
-impl fmt::Debug for Error {
-  fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-    write!(f, "{}", self)
-  }
-}
-
-#[test]
-fn show_an_error() {
-  assert_eq!(format!("{:?}", parse("(aaaa").unwrap_err()), "1:4: unexpected eof");
-}
-
-fn get_line_and_column(s: &str, pos: usize) -> (usize, usize) {
-  let mut line: usize = 1;
-  let mut col:  isize = -1;
-  for c in s.chars().take(pos+1) {
-    if c == '\n' {
-      line += 1;
-      col   = -1;
-    } else {
-      col  += 1;
-    }
-  }
-  (line, cmp::max(col, 0) as usize)
-}
-
-#[test]
-fn line_and_col_test() {
-  let s = "0123456789\n0123456789\n\n6";
-  assert_eq!(get_line_and_column(s, 4), (1, 4));
-
-  assert_eq!(get_line_and_column(s, 10), (2, 0));
-  assert_eq!(get_line_and_column(s, 11), (2, 0));
-  assert_eq!(get_line_and_column(s, 15), (2, 4));
-
-  assert_eq!(get_line_and_column(s, 21), (3, 0));
-  assert_eq!(get_line_and_column(s, 22), (4, 0));
-  assert_eq!(get_line_and_column(s, 23), (4, 0));
-  assert_eq!(get_line_and_column(s, 500), (4, 0));
-}
-
-#[cold]
-fn err_impl(message: &'static str, s: &str, pos: &usize) -> Err {
-  let (line, column) = get_line_and_column(s, *pos);
-  Box::new(Error {
-    message: message,
-    line:    line,
-    column:  column,
-    index:   *pos,
-  })
-}
-
 fn err<T>(message: &'static str, s: &str, pos: &usize) -> ERes<T> {
   Err(err_impl(message, s, pos))
-}
-
-/// A helpful utility to trace the execution of a parser while testing.  It will
-/// be compiled out in release builds.
-#[allow(unused_variables)]
-fn dbg(msg: &str, pos: &usize) {
-  //println!("{} @ {}", msg, pos)
 }
 
 fn atom_of_string(s: String) -> Atom {
