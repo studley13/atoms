@@ -13,3 +13,5 @@ keywords = [ "atom", "sexp", "parsing", "s-expression", "file-format" ]
 description = "S-expression parser and pretty-printer."
 
 license = "MIT"
+
+travis-ci = { repository = "studley13/atoms" }
