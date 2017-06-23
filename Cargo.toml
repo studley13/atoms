@@ -14,4 +14,6 @@ description = "S-expression parser and pretty-printer."
 
 license = "MIT"
 
+[badges]
+
 travis-ci = { repository = "studley13/atoms" }
