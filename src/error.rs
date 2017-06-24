@@ -3,13 +3,7 @@
 #![deny(missing_docs)]
 #![deny(unsafe_code)]
 
-use std::error;
-use std::fmt;
-
-/// SHorthand to create an error result for a given error
-fn err<T>(message: &'static str, s: &str, pos: &usize) -> ERes<T> {
-  Err(err_impl(message, s, pos))
-}
+use std::{error, fmt, cmp};
 
 /// The representation of an s-expression parse error.
 pub struct ParseError {
@@ -31,7 +25,7 @@ impl ParseError {
     #[cold]
     pub fn new(message: &'static str, source: &str, pos: usize) -> Err {
         let (line, column) = ParseError::get_location(source, pos);
-        Box::new(Error {
+        Box::new(ParseError {
             message: message,
             line:    line,
             column:  column,
@@ -65,7 +59,7 @@ impl ParseError {
     }
 }
 
-impl error::Error for Error {
+impl error::Error for ParseError {
     fn description(&self) -> &str { self.message }
     fn cause(&self) -> Option<&error::Error> { None }
 }
@@ -78,7 +72,7 @@ impl error::Error for Error {
 type Err = Box<ParseError>;
 
 /// The result of parsing an s-expression
-type ParseResult<T> = Result<T, Err>;
+pub type ParseResult<T> = Result<T, Err>;
 
 impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
