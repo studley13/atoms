@@ -89,7 +89,7 @@ impl<Sym> Display for Value<Sym> where Sym: ToString + FromStr + Sized {
             Value::Str(ref text) => write!(f, "\"{}\"", escape_string(&text)),
             Value::Symbol(ref sym) => write!(f, "{}", escape_string(&sym.to_string().replace(" ", "\\ "))),
             Value::Int(ref i) => write!(f, "{}", i),
-            Value::Float(ref fl) => write!(f, "{}", fl),
+            Value::Float(ref fl) => format_float(f, *fl),
         }
     }
 }
@@ -114,4 +114,32 @@ fn escape_string(text: &AsRef<str>) -> String {
     text.as_ref().chars().map(
         |c| -> String { c.escape_default().collect() }
     ).collect()
+}
+
+fn format_float<F: Into<f64>>(f: &mut Formatter, fl: F) -> Result<(), fmt::Error> {
+    let float = fl.into();
+    match float.fract() {
+        0f64 => write!(f, "{:.1}", float),
+        _ => write!(f, "{}", float),
+    }
+}
+
+#[test]
+fn value_fmt_test() {
+    assert_eq!(format!("{:?}", Value::<String>::int(13)), "13");
+    assert_eq!(format!("{:?}", Value::<String>::int(-13)), "-13");
+    assert_eq!(format!("{:?}", Value::<String>::float(13.0)), "13.0");
+    assert_eq!(format!("{:?}", Value::<String>::float(13.125)), "13.125");
+    assert_eq!(format!("{:?}", Value::<String>::float(13.333)), "13.333");
+    assert_eq!(format!("{:?}", Value::<String>::float(-13.333)), "-13.333");
+    assert_eq!(format!("{:?}", Value::<String>::string("text")), "\"text\"");
+    assert_eq!(format!("{:?}", Value::<String>::string("hello\tthere\nfriend")), "\"hello\\tthere\\nfriend\"");
+    assert_eq!(format!("{:?}", Value::<String>::symbol("text").unwrap()), "text");
+    assert_eq!(format!("{:?}", Value::<String>::symbol("hello\tthere\nfriend").unwrap()), "hello\\tthere\\nfriend");
+    assert_eq!(format!("{:?}", Value::<String>::list(vec![
+        Value::<String>::int(13),
+        Value::<String>::float(13.333),
+        Value::<String>::string("text"),
+        Value::<String>::symbol("symbol").unwrap(),
+    ])), "(13 13.333 \"text\" symbol)");
 }
