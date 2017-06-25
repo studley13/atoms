@@ -10,6 +10,7 @@ use std::fmt::{self, Display, Debug, Formatter};
  * This is a simple representation of values, using String to represent all
  * symbols.
  */
+#[allow(dead_code)]
 pub type StringValue = Value<String>;
 
 /** 

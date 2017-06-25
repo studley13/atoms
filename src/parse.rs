@@ -32,7 +32,20 @@ impl<'a> Parser<'a> {
      */
     pub fn parse<Sym: Sized + ToString + FromStr>(self) -> ParseResult<Value<Sym>> {
         let mut chars = self.source.chars().enumerate().peekable();
-        self.parse_expression(&mut chars)
+        
+        // Remove leading whitespace
+        consume_whitespace(&mut chars);
+
+        let result = self.parse_expression(&mut chars);
+
+        // Remove trailing whitespace
+        consume_whitespace(&mut chars);
+
+        if let Some((pos, _)) = chars.next() {
+            ParseError::err("Trailing garbage text", self.source, pos)
+        } else {
+            result
+        }
     }
 
     /**
@@ -207,4 +220,75 @@ fn consume_line(chars: &mut CharSource) {
  */
 fn unescape(src: &AsRef<str>) -> Option<String> {
     Some(src.as_ref().to_owned())
+}
+
+#[test]
+fn integer_test() {
+    let text = "(1 2 3 4 5)";
+    let nums = vec![1, 2, 3, 4, 5].iter().map(|i| Value::int(*i)).collect();
+    let output = Value::list(nums);
+    let parser = Parser::new(&text);
+    assert_eq!(parser.parse::<String>().unwrap(), output);
+}
+
+#[test]
+fn float_test() {
+    let text = "(1.0 2.0 3.0 4.0 5.0)";
+    let nums = vec![1.0, 2.0, 3.0, 4.0, 5.0].iter().map(|f| Value::float(*f)).collect();
+    let output = Value::list(nums);
+    let parser = Parser::new(&text);
+    assert_eq!(parser.parse::<String>().unwrap(), output);
+}
+
+#[test]
+fn string_test() {
+    let text = "(\"one\" \"two\" \"three\" \"four\" \"five\")";
+    let nums = vec!["one", "two", "three", "four", "five"].iter().map(|s| Value::string(*s)).collect();
+    let output = Value::list(nums);
+    let parser = Parser::new(&text);
+    assert_eq!(parser.parse::<String>().unwrap(), output);
+}
+
+#[test]
+fn symbol_test() {
+    let text = "(one two three four five)";
+    let nums = vec!["one", "two", "three", "four", "five"].iter().map(|s| Value::symbol(*s).unwrap()).collect();
+    let output = Value::list(nums);
+    let parser = Parser::new(&text);
+    assert_eq!(parser.parse::<String>().unwrap(), output);
+}
+
+#[test]
+fn nesting_test() {
+    let text = "(one (two three) (four five))";
+    let inner_one = Value::list(vec!["two", "three"].iter().map(|s| Value::symbol(*s).unwrap()).collect());
+    let inner_two = Value::list(vec!["four", "five"].iter().map(|s| Value::symbol(*s).unwrap()).collect());
+    let output = Value::list(vec![Value::symbol("one").unwrap(), inner_one, inner_two]);
+    let parser = Parser::new(&text);
+    assert_eq!(parser.parse::<String>().unwrap(), output);
+}
+
+#[test]
+#[ignore]
+fn space_escape_test() {
+    let text = "(one\\ two\\ three\\ four\\ five)";
+    let output = Value::list(vec![Value::symbol("one two three four five").unwrap()]);
+    let parser = Parser::new(&text);
+    assert_eq!(parser.parse::<String>().unwrap(), output);
+}
+
+#[test]
+fn skip_whitespace_test() {
+    let text = "   \n  \t (  \n\t   one    two   \n\t    three    \n\t   four five    \t   \n )   \n   \t";
+    let nums = vec!["one", "two", "three", "four", "five"].iter().map(|s| Value::symbol(*s).unwrap()).collect();
+    let output = Value::list(nums);
+    let parser = Parser::new(&text);
+    assert_eq!(parser.parse::<String>().unwrap(), output);
+}
+
+#[test]
+fn trailing_garbage_test() {
+    let text = "(one two three four five) garbage";
+    let parser = Parser::new(&text);
+    assert!(parser.parse::<String>().is_err());
 }

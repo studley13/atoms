@@ -90,8 +90,8 @@ impl fmt::Debug for ParseError {
 fn error_display() {
     let error = ParseError {
         message: "Unexpected eof",
-        line:    4usize,
-        column:  1usize,
+        line:    1usize,
+        column:  4usize,
         index:   4usize
     };
 
