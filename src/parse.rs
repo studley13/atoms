@@ -1,7 +1,7 @@
 //! Functions related to parsing of input
 
 use error::{ParseError, ParseResult};
-use value::{Value, self};
+use value::{Value};
 
 use std::str::{Chars, FromStr};
 use std::iter::{Enumerate, Peekable};
@@ -34,12 +34,12 @@ impl<'a> Parser<'a> {
         let mut chars = self.source.chars().enumerate().peekable();
         
         // Remove leading whitespace
-        consume_whitespace(&mut chars);
+        consume_comments(&mut chars);
 
         let result = self.parse_expression(&mut chars);
 
         // Remove trailing whitespace
-        consume_whitespace(&mut chars);
+        consume_comments(&mut chars);
 
         if let Some((pos, _)) = chars.next() {
             ParseError::err("Trailing garbage text", self.source, pos)
@@ -63,8 +63,9 @@ impl<'a> Parser<'a> {
         let mut values: Vec<Value<Sym>> = Vec::new();
 
         consume_whitespace(chars);
+        consume_comments(chars);
 
-        while let Some(&(pos, c)) = chars.peek() {
+        while let Some(&(_, c)) = chars.peek() {
             match c {
                 // Remove comment lines
                 ';' => consume_line(chars),
@@ -100,7 +101,7 @@ impl<'a> Parser<'a> {
             if preview == '\\' {
                 let (_, c) = chars.next().unwrap();
                 value.push(c);
-                if let Some((follower_pos, follower)) = chars.next() {
+                if let Some((_, follower)) = chars.next() {
                     value.push(follower);
                 } else {
                     return ParseError::err("Unexpected end of escape sequence", self.source, pos);
@@ -216,6 +217,22 @@ fn consume_line(chars: &mut CharSource) {
 }
 
 /**
+ * Consume blocks of comments
+ */
+fn consume_comments(chars: &mut CharSource) {
+    consume_whitespace(chars);
+    while let Some(&(_, c)) = chars.peek() {
+        if c == ';' {
+            consume_line(chars);
+        } else if c.is_whitespace() {
+            consume_whitespace(chars);
+        } else {
+            return;
+        }
+    }
+}
+
+/**
  * Unescape raw text
  */
 fn unescape(src: &AsRef<str>) -> Option<String> {
@@ -278,6 +295,15 @@ fn space_escape_test() {
 }
 
 #[test]
+fn comment_test() {
+    let text = "  ;comment\n (one;comment\n two ;;;comment with space\n three four five) ;trailing comment\n ;end";
+    let nums = vec!["one", "two", "three", "four", "five"].iter().map(|s| Value::symbol(*s).unwrap()).collect();
+    let output = Value::list(nums);
+    let parser = Parser::new(&text);
+    assert_eq!(parser.parse::<String>().unwrap(), output);
+}
+
+#[test]
 fn skip_whitespace_test() {
     let text = "   \n  \t (  \n\t   one    two   \n\t    three    \n\t   four five    \t   \n )   \n   \t";
     let nums = vec!["one", "two", "three", "four", "five"].iter().map(|s| Value::symbol(*s).unwrap()).collect();
@@ -288,7 +314,7 @@ fn skip_whitespace_test() {
 
 #[test]
 fn trailing_garbage_test() {
-    let text = "(one two three four five) garbage";
+    let text = "(one two three four five) ;not garbage\n garbage";
     let parser = Parser::new(&text);
     assert!(parser.parse::<String>().is_err());
 }
