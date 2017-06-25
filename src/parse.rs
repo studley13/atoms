@@ -3,6 +3,8 @@
 use error::{ParseError, ParseResult};
 use value::{Value};
 
+use unescape::unescape;
+
 use std::str::{Chars, FromStr};
 use std::iter::{Enumerate, Peekable};
 
@@ -144,14 +146,14 @@ impl<'a> Parser<'a> {
      */
     fn unescape_value(&self, chars: &mut CharSource) -> ParseResult<String> {
         let &(pos, _) = chars.peek().unwrap();
-        self.parse_text(&try!(self.extract_delimited(chars, &default_delimit, true)), pos)
+        self.parse_text(&try!(self.extract_delimited(chars, &default_delimit, true)).replace("\\ ", " "), pos)
     }
 
     /**
      * Parse a an escaped text (symbol or string)
      */
     fn parse_text(&self, s: &AsRef<str>, start_pos: usize) -> ParseResult<String> {
-        if let Some(parsed) = unescape(s) {
+        if let Some(parsed) = unescape(s.as_ref()) {
             Ok(parsed)
         } else {
             ParseError::err("String literal escape error", self.source, start_pos)
@@ -232,11 +234,12 @@ fn consume_comments(chars: &mut CharSource) {
     }
 }
 
-/**
- * Unescape raw text
- */
-fn unescape(src: &AsRef<str>) -> Option<String> {
-    Some(src.as_ref().to_owned())
+#[test]
+fn unary_test() {
+    let text = "(one)";
+    let output = Value::list(vec![Value::symbol("one").unwrap()]);
+    let parser = Parser::new(&text);
+    assert_eq!(parser.parse::<String>().unwrap(), output);
 }
 
 #[test]
@@ -286,7 +289,6 @@ fn nesting_test() {
 }
 
 #[test]
-#[ignore]
 fn space_escape_test() {
     let text = "(one\\ two\\ three\\ four\\ five)";
     let output = Value::list(vec![Value::symbol("one two three four five").unwrap()]);
@@ -317,4 +319,17 @@ fn trailing_garbage_test() {
     let text = "(one two three four five) ;not garbage\n garbage";
     let parser = Parser::new(&text);
     assert!(parser.parse::<String>().is_err());
+}
+
+#[test]
+fn escape_parsing_test() {
+    let text = "(one\\ two 3 4 \"five\\\\is\\ta\\rless\\nmagic\\\'number\\\"\")";
+    let output = Value::list(vec![
+        Value::symbol("one two").unwrap(),
+        Value::int(3),
+        Value::int(4),
+        Value::string("five\\is\ta\rless\nmagic\'number\"")
+    ]);
+    let parser = Parser::new(&text);
+    assert_eq!(parser.parse::<String>().unwrap(), output);
 }

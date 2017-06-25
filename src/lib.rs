@@ -5,6 +5,8 @@
 #![deny(missing_docs)]
 #![deny(unsafe_code)]
 
+extern crate unescape;
+
 mod parse;
 mod error;
 mod value;
