@@ -323,11 +323,24 @@ fn consume_comments(chars: &mut CharSource) {
 }
 
 #[test]
-fn unary_test() {
+fn single_element() {
     let text = "(one)";
     let output = Value::list(vec![Value::symbol("one").unwrap()]);
     let parser = Parser::new(&text);
     assert_eq!(parser.parse::<String>().unwrap(), output);
+}
+
+#[test]
+fn unary_test() {
+    fn unary(text: &'static str, output: Value<String>) {
+        let parser = Parser::new(&text);
+        assert_eq!(parser.parse().unwrap(), output);
+    }
+    unary("()", Value::Nil);
+    unary("one", Value::symbol("one").unwrap());
+    unary("2", Value::int(2));
+    unary("3.0", Value::float(3.0));
+    unary("\"four\"", Value::string("four"));
 }
 
 #[test]
