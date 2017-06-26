@@ -1,6 +1,6 @@
 [package]
 name = "atoms"
-version = "2.0.0"
+version = "2.1.0"
 authors = ["Curtis Millar <curtis@curtism.me>", "Clark Gaebel <cg.wowus.cg@gmail.com>"]
 
 documentation = "https://docs.rs/atoms"
