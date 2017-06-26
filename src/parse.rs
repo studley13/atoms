@@ -10,6 +10,38 @@ use std::iter::{Enumerate, Peekable};
 
 type CharSource<'a> = Peekable<Enumerate<Chars<'a>>>;
 
+macro_rules! cons_side {
+    ( $me:ident, $chars:ident, $default:block, $($catch:pat => $catch_result:block),*) => {{
+        consume_comments($chars);
+        if let Some(&(_, c)) = $chars.peek() {
+            match c {
+                $($catch => $catch_result),*
+                _ => $default,
+            }
+        } else {
+            ParseError::err("Error parsing cons or list", $me.source, $me.source.len())
+        }
+    }}
+}
+
+macro_rules! cons_err {
+    ( $me:ident, $chars:ident, $($err:pat => $err_text:expr),*) => {{
+        consume_comments($chars);
+        if let Some(&(pos, c)) = $chars.peek() {
+            match c {
+                $($err => ParseError::err($err_text, $me.source, pos),),*
+                _ => $me.parse_expression($chars),
+            }
+        } else {
+            ParseError::err("Error parsing cons or list", $me.source, $me.source.len())
+        }
+    }}
+}
+
+macro_rules! end_of_file {
+    ( $me:ident ) => {ParseError::err("Unexpected end of file", $me.source, $me.source.len())}
+}
+
 /**
  * A parser for a particular string.
  */
@@ -55,40 +87,89 @@ impl<'a> Parser<'a> {
      */
     fn parse_expression<Sym: Sized + ToString + FromStr>(&self, chars: &mut CharSource) 
         -> ParseResult<Value<Sym>> {
-        // Consume leading brace
-        let (pos, c) = chars.next().unwrap();
-        if c != '(' {
-            return ParseError::err("Error parsing s-expression", self.source, pos);
-        }
         
-        // Values in the list
-        let mut values: Vec<Value<Sym>> = Vec::new();
-
-        consume_whitespace(chars);
+        // Consume leading comments
         consume_comments(chars);
 
-        while let Some(&(_, c)) = chars.peek() {
+        if let Some(&(pos, c)) = chars.peek() {
             match c {
-                // Remove comment lines
-                ';' => consume_line(chars),
                 // String literal
-                '"' => values.push(try!(self.parse_quoted(chars))),
-                // Child expression
-                '(' => values.push(try!(self.parse_expression(chars))),
-                // End of expression
+                '"' => self.parse_quoted(chars),
+                // Start of cons 
+                '(' => {
+                    chars.next();
+                    self.parse_cons(chars)
+                },
+                // End of Cons
+                ')' => ParseError::err("Unexpected close brace", self.source, pos),
+                // Extension
+                '#' => ParseError::err("Extensions are not yet implemented", self.source, pos),
+                // Quoting
+                '`' => ParseError::err("Code/data distinction is not yet implemented", self.source, pos),
+                ',' => ParseError::err("Code/data distinction is not yet implemented", self.source, pos),
+                '\'' => ParseError::err("Code/data distinction is not yet implemented", self.source, pos),
+                // Automatic value
+                _   => self.parse_value(chars),
+            }
+        } else {
+            end_of_file!(self)
+        }
+    }
+
+    /**
+     * Parse a Cons
+     */
+    fn parse_cons<Sym: Sized + ToString + FromStr>(&self, chars: &mut CharSource)
+        -> ParseResult<Value<Sym>> {
+        let left = try!(cons_side!(self, chars, {self.parse_expression(chars)}, ')' => {
+            chars.next();
+            Ok(Value::Nil)
+        }));
+
+        if left.is_nil() {
+            Ok(left)
+        } else {
+            let right = try!(cons_side!(self, chars, {self.parse_cons(chars)},
                 ')' => {
                     chars.next();
-                    return Ok(Value::list(values))
+                    Ok(Value::Nil)
                 },
-                // Automatic value
-                _   => values.push(try!(self.parse_value(chars))),
-            }
+                '.' => {
+                    self.parse_cons_rest(chars)
+                }
+            ));
 
-            consume_whitespace(chars);
+            Ok(Value::cons(left, right))
         }
+    }
 
-        // End of expression not found
-        ParseError::err("Missing end of s-expression", self.source, self.source.len())
+    fn parse_cons_rest<Sym: Sized + ToString + FromStr>(&self, chars: &mut CharSource)
+        -> ParseResult<Value<Sym>> {
+        let &(pos, _) = chars.peek().unwrap();
+        let next_val = try!(self.unescape_value(chars));
+
+        if next_val == "." {
+            // Cons join
+            consume_comments(chars);
+            let value = cons_err!(self, chars, 
+                ')' => "Cons closed without right side"
+            );
+            if let Some((pos, c)) = chars.next() {
+                if c != ')' {
+                    ParseError::err("Error finding close of cons", self.source, pos)
+                } else {
+                    value
+                }
+            } else {
+                end_of_file!(self)
+            }
+        } else {
+            // List
+            Ok(Value::cons(
+                try!(self.value_from_string(&next_val, pos)),
+                try!(self.parse_cons(chars))
+            ))
+        }
     }
 
     /**
@@ -120,7 +201,7 @@ impl<'a> Parser<'a> {
         if allow_eof {
             Ok(value)
         } else {
-            ParseError::err("Unexpected end of file", self.source, self.source.len())
+            end_of_file!(self)
         }
     }
 
@@ -167,7 +248,14 @@ impl<'a> Parser<'a> {
         -> ParseResult<Value<Sym>> {
         let &(pos, _) = chars.peek().unwrap();
         let text = try!(self.unescape_value(chars));
+        self.value_from_string(&text, pos)
+    }
 
+    /**
+     * Parse a string into a value
+     */
+    fn value_from_string<Sym: Sized + ToString + FromStr>(&self, text: &str, pos: usize) 
+        -> ParseResult<Value<Sym>> {
         // Try make an integer
         match i64::from_str(&text) {
             Ok(i) => return Ok(Value::int(i)),
@@ -193,7 +281,7 @@ impl<'a> Parser<'a> {
  * Default predicate for delimitation is whitespace
  */
 fn default_delimit(c: char) -> bool { 
-    c.is_whitespace() || c == ';' || c == '(' || c == ')' || c == '"'
+    c.is_whitespace() || c == ';' || c == '(' || c == ')' || c == '"' 
 }
 
 /**
@@ -235,11 +323,24 @@ fn consume_comments(chars: &mut CharSource) {
 }
 
 #[test]
-fn unary_test() {
+fn single_element() {
     let text = "(one)";
     let output = Value::list(vec![Value::symbol("one").unwrap()]);
     let parser = Parser::new(&text);
     assert_eq!(parser.parse::<String>().unwrap(), output);
+}
+
+#[test]
+fn unary_test() {
+    fn unary(text: &'static str, output: Value<String>) {
+        let parser = Parser::new(&text);
+        assert_eq!(parser.parse().unwrap(), output);
+    }
+    unary("()", Value::Nil);
+    unary("one", Value::symbol("one").unwrap());
+    unary("2", Value::int(2));
+    unary("3.0", Value::float(3.0));
+    unary("\"four\"", Value::string("four"));
 }
 
 #[test]
@@ -332,4 +433,45 @@ fn escape_parsing_test() {
     ]);
     let parser = Parser::new(&text);
     assert_eq!(parser.parse::<String>().unwrap(), output);
+}
+
+#[test]
+fn cons_parsing() {
+    let text = "(one . (two . (three . four)))";
+    let output = Value::cons(
+        Value::symbol("one").unwrap(), 
+        Value::cons(
+            Value::symbol("two").unwrap(),
+            Value::cons(
+                Value::symbol("three").unwrap(),
+                Value::symbol("four").unwrap(),
+            ),
+        ),
+    );
+    let parser = Parser::new(&text);
+    assert_eq!(parser.parse::<String>().unwrap(), output);
+}
+
+#[test]
+fn trailing_cons() {
+    let text = "(one two three . four)";
+    let output = Value::cons(
+        Value::symbol("one").unwrap(), 
+        Value::cons(
+            Value::symbol("two").unwrap(),
+            Value::cons(
+                Value::symbol("three").unwrap(),
+                Value::symbol("four").unwrap(),
+            ),
+        ),
+    );
+    let parser = Parser::new(&text);
+    assert_eq!(parser.parse::<String>().unwrap(), output);
+}
+
+#[test]
+fn split_cons() {
+    let text = "(one . two . three . four)";
+    let parser = Parser::new(&text);
+    assert!(parser.parse::<String>().is_err());
 }

@@ -29,8 +29,10 @@ pub enum Value<Sym: Sized + ToString + FromStr> {
     Int(i64),
     /// A floating point value
     Float(f64),
-    /// A list of values
-    List(Vec<Value<Sym>>)
+    /// A Cons cell
+    Cons(Box<Value<Sym>>, Box<Value<Sym>>),
+    /// A Nil value
+    Nil,
 }
 
 impl<Sym: Sized + ToString + FromStr> Value<Sym> {
@@ -65,31 +67,50 @@ impl<Sym: Sized + ToString + FromStr> Value<Sym> {
     }
 
     /// Create a new list
-    pub fn list<V: Into<Value<Sym>>>(source_vec: Vec<V>) -> Value<Sym> {
+    pub fn list<V: Into<Value<Sym>>>(mut source_vec: Vec<V>) -> Value<Sym> {
 
         // Convert all members into values
-        let mut val_vec: Vec<Value<Sym>> = Vec::new();
-        for value in source_vec {
-            val_vec.push(value.into());
+        let mut result = Value::Nil;
+
+        while let Some(value) = source_vec.pop() {
+            result = Value::cons(value.into(), result)
         }
 
-        Value::List(val_vec)
+        result
     }
 
-    /// Create a new empty list
-    pub fn empty_list() -> Value<Sym> {
-        Value::List(Vec::new())
+    /// Crate a cons cell
+    pub fn cons<V: Into<Value<Sym>>>(left: V, right: V) -> Value<Sym> {
+        Value::Cons(Box::new(left.into()), Box::new(right.into()))
+    }
+
+    /// Check if a value is a nill
+    pub fn is_nil(&self) -> bool {
+        match *self {
+            Value::Nil => true,
+            _ => false,
+        }
+    }
+
+    /// Check is a vlue is a list
+    pub fn is_list(&self) -> bool {
+        match *self {
+            Value::Nil => true,
+            Value::Cons(_, ref right) => right.is_list(),
+            _ => false,
+        }
     }
 }
 
 impl<Sym> Display for Value<Sym> where Sym: ToString + FromStr + Sized {
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
         match *self {
-            Value::List(ref values) => display_list(&values, f),
+            Value::Cons(ref left, ref right) => display_cons(left, right, true, f),
             Value::Str(ref text) => write!(f, "\"{}\"", escape_string(&text)),
             Value::Symbol(ref sym) => write!(f, "{}", escape_string(&sym.to_string().replace(" ", "\\ "))),
             Value::Int(ref i) => write!(f, "{}", i),
             Value::Float(ref fl) => format_float(f, *fl),
+            Value::Nil => write!(f, "()"),
         }
     }
 }
@@ -100,14 +121,26 @@ impl<Sym> Debug for Value<Sym> where Sym: ToString + FromStr + Sized {
     }
 }
 
-fn display_list<Sym: ToString + FromStr + Sized>(values: &Vec<Value<Sym>>, f: &mut Formatter) 
+fn display_cons<Sym: ToString + FromStr + Sized>(left: &Value<Sym>, 
+                                                 right: &Value<Sym>, 
+                                                 root: bool, f: &mut Formatter) 
     -> Result<(), fmt::Error> {
-    try!(write!(f, "("));
-    for (i, value) in values.iter().enumerate() {
-        let space = if i == 0 { "" } else { " " };
-        try!(write!(f, "{}{}", space, value));
+    if root {
+        try!(write!(f, "("));
     }
-    write!(f, ")")
+
+    // Write the left value
+    try!(write!(f, "{}", left));
+
+    // Write the right value
+    match *right {
+        Value::Nil => write!(f, ")"),
+        Value::Cons(ref left, ref right) => {
+            try!(write!(f, " "));
+            display_cons(left, right, false, f)
+        }
+        _ => write!(f, " . {})", right),
+    }
 }
 
 fn escape_string(text: &AsRef<str>) -> String {
@@ -142,4 +175,14 @@ fn value_fmt_test() {
         Value::<String>::string("text"),
         Value::<String>::symbol("symbol").unwrap(),
     ])), "(13 13.333 \"text\" symbol)");
+    assert_eq!(format!("{:?}", Value::<String>::cons(
+        Value::int(13),
+        Value::cons(
+            Value::float(13.333),
+            Value::cons(
+                Value::string("text"),
+                Value::symbol("symbol").unwrap()
+            )
+        )
+    )), "(13 13.333 \"text\" . symbol)");
 }
