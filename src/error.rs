@@ -5,15 +5,17 @@
 
 use std::{error, fmt, cmp};
 
-/// The representation of an s-expression parse error.
+/**
+ * Error that occurs when parsing s-expression.
+ */
 pub struct ParseError {
-    /// The error message.
+    /// The error that occurred
     pub message: &'static str,
-    /// The line number on which the error occurred.
+    /// The line number at which the error occurred.
     pub line:    usize,
-    /// The column number on which the error occurred.
+    /// The column number at which the error occurred.
     pub column:  usize,
-    /// The index in the given string which caused the error.
+    /// The index in the given `str` at which caused the error.
     pub index:   usize,
 }
 
@@ -23,7 +25,7 @@ impl ParseError {
      * there is no raw error constructor
      */
     #[cold]
-    pub fn new(message: &'static str, source: &str, pos: usize) -> Err {
+    fn new(message: &'static str, source: &str, pos: usize) -> Err {
         let (line, column) = ParseError::get_location(source, pos);
         Box::new(ParseError {
             message: message,
@@ -33,7 +35,13 @@ impl ParseError {
         })
     }
 
-    /// Directly create an `ParseResult`
+    /**
+     * Create an `Err` containing a given error.
+     *
+     * The `message` describes what went wrong, `source` is the `str` that was
+     * being parsed and `pos` is the index in the `str` where the parsing error
+     * occurred.
+     */
     pub fn err<T>(message: &'static str, source: &str, pos: usize) -> ParseResult<T> {
         Err(ParseError::new(message, source, pos))
     }
@@ -71,7 +79,12 @@ impl error::Error for ParseError {
 /// be if `Err` were unboxed.
 type Err = Box<ParseError>;
 
-/// The result of parsing an s-expression
+/**
+ * The result of parsing an s-expression.
+ *
+ * If something goes wrong, the error should be a `ParseError`, otherwise it's
+ * a successful parsing of the s-expression fragment.
+ */
 pub type ParseResult<T> = Result<T, Err>;
 
 impl fmt::Display for ParseError {
