@@ -351,9 +351,10 @@ fn escape_string(text: &AsRef<str>) -> String {
 
 fn format_float<F: Into<f64>>(f: &mut Formatter, fl: F) -> Result<(), fmt::Error> {
     let float = fl.into();
-    match float.fract() {
-        0f64 => write!(f, "{:.1}", float),
-        _ => write!(f, "{}", float),
+    if float.fract() == 0f64 {
+        write!(f, "{:.1}", float)
+    } else {
+        write!(f, "{}", float)
     }
 }
 
