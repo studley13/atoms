@@ -455,3 +455,10 @@ fn trailing_cons() {
     let parser = Parser::new(&text);
     assert_eq!(parser.parse::<String>().unwrap(), output);
 }
+
+#[test]
+fn split_cons() {
+    let text = "(one . two . three . four)";
+    let parser = Parser::new(&text);
+    assert!(parser.parse::<String>().is_err());
+}
