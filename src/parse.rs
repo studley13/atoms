@@ -48,10 +48,17 @@ macro_rules! end_of_file {
  * Parsing expressions requires a parser to be attached to the given string.
  * 
  * ```rust
- * use atoms::Parser;
+ * use atoms::{Parser, StringValue};
  * let text = "(this is a series of symbols)";
  * let parser = Parser::new(&text);
- * let parsed = parser.parse_basic();
+ * let parsed = parser.parse_basic().unwrap();
+ * assert_eq!(
+ *     StringValue::into_list(
+ *         vec!["this", "is", "a", "series", "of", "symbols"], 
+ *         |s| StringValue::symbol(s).unwrap()
+ *     ),
+ *     parsed
+ * );
  * ```
  * 
  * The type parameter given to `Parser::parse` is to inform the parser of 
@@ -83,10 +90,17 @@ impl<'a> Parser<'a> {
      * Parse the given `str`. Consumes the parser.
      * 
      * ```rust
-     * use atoms::Parser;
+     * use atoms::{Parser, Value};
      * let text = "(this is a series of symbols)";
      * let parser = Parser::new(&text);
-     * let parsed = parser.parse::<String>();
+     * let parsed = parser.parse::<String>().unwrap();
+     * assert_eq!(
+     *     Value::into_list(
+     *         vec!["this", "is", "a", "series", "of", "symbols"], 
+     *         |s| Value::symbol(s).unwrap()
+     *     ),
+     *     parsed
+     * );
      * ```
      *
      * This parser must be informed of how to represent symbols when they are
@@ -118,13 +132,20 @@ impl<'a> Parser<'a> {
     }
 
     /**
-     * Parse the given `str` storing symbols as `String`s. Cosumes the parser.
+     * Parse the given `str` storing symbols as `String`s. Consumes the parser.
      * 
      * ```rust
-     * use atoms::Parser;
+     * use atoms::{Parser, StringValue};
      * let text = "(this is a series of symbols)";
      * let parser = Parser::new(&text);
-     * let parsed = parser.parse::<String>();
+     * let parsed = parser.parse::<String>().unwrap();
+     * assert_eq!(
+     *     StringValue::into_list(
+     *         vec!["this", "is", "a", "series", "of", "symbols"], 
+     *         |s| StringValue::symbol(s).unwrap()
+     *     ),
+     *     parsed
+     * );
      * ```
      *
      * In cases where no special behaviour for symbols is needed, `parse_basic`

@@ -21,14 +21,21 @@
 //! Parsing expressions requires a parser to be attached to the given string.
 //!
 //! ```rust
-//! use atoms::Parser;
+//! use atoms::{Parser, StringValue};
 //! let text = "(this is a series of symbols)";
 //! let parser = Parser::new(&text);
-//! let parsed = parser.parse_basic();
+//! let parsed = parser.parse_basic().unwrap();
+//! assert_eq!(
+//!     StringValue::into_list(
+//!         vec!["this", "is", "a", "series", "of", "symbols"], 
+//!         |s| StringValue::symbol(s).unwrap()
+//!     ),
+//!     parsed
+//! );
 //! ```
 //!
 //! Custom parsing of symbols can be fairly easily defined allowing for
-//! restircted symbol sets with parsing errors. See
+//! restricted symbol sets with parsing errors. See
 //! [`Parser::parse`](struct.Parser.html#method.parse) for more.
 //!
 //! # Rendering
@@ -48,7 +55,7 @@
 //!         )
 //!     )
 //! );
-//! println!("{}", value);
+//! assert_eq!(value.to_string(), "(this \"is\" 4 . s-expression)");
 //! ```
 //!
 

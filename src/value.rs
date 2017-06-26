@@ -162,7 +162,7 @@ impl<Sym: Sized + ToString + FromStr> Value<Sym> {
      */
     pub fn list<V: Into<Value<Sym>>>(mut source_vec: Vec<V>) -> Value<Sym> {
 
-        // THe end of the list is a nil
+        // The end of the list is a nil
         let mut result = Value::Nil;
 
         while let Some(value) = source_vec.pop() {
@@ -211,7 +211,7 @@ impl<Sym: Sized + ToString + FromStr> Value<Sym> {
      * Create a cons cell with only a left element.
      *
      * This creates a cons cell with the right element being a nil. This is
-     * iseful it you are manually constructing lists.
+     * useful it you are manually constructing lists.
      *
      * ```rust
      * use atoms::StringValue;
@@ -254,7 +254,7 @@ impl<Sym: Sized + ToString + FromStr> Value<Sym> {
     }
 
     /**
-     * Chaeck if a value is a valid list.
+     * Check if a value is a valid list.
      *
      * A value is a list if:
      * * it is a `Value::Nil`, or
