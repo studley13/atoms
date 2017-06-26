@@ -3,7 +3,8 @@ name = "atoms"
 version = "2.1.2"
 authors = ["Curtis Millar <curtis@curtism.me>", "Clark Gaebel <cg.wowus.cg@gmail.com>"]
 
-documentation = "https://docs.rs/crate/atoms"
+documentation = "https://docs.rs/atoms"
+homepage      = "https://docs.rs/crate/atoms"
 repository    = "https://github.com/studley13/atoms"
 
 readme = "README.md"
