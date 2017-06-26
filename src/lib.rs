@@ -28,7 +28,7 @@
 //! ```
 //!
 //! Custom parsing of symbols can be fairly easily defined allowing for
-//! restircted symbol sets with parsing errors. See
+//! restricted symbol sets with parsing errors. See
 //! [`Parser::parse`](struct.Parser.html#method.parse) for more.
 //!
 //! # Rendering
