@@ -118,7 +118,7 @@ impl<'a> Parser<'a> {
     }
 
     /**
-     * Parse the given `str` storing symbols as `String`s. Cosumes the parser.
+     * Parse the given `str` storing symbols as `String`s. Consumes the parser.
      * 
      * ```rust
      * use atoms::Parser;
