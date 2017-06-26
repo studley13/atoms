@@ -1,7 +1,7 @@
 //! Functions related to parsing of input
 
 use error::{ParseError, ParseResult};
-use value::{Value};
+use value::{Value, StringValue};
 
 use unescape::unescape;
 
@@ -43,7 +43,25 @@ macro_rules! end_of_file {
 }
 
 /**
- * A parser for a particular string.
+ * A parser for a particular `str`
+ *
+ * Parsing expressions requires a parser to be attached to the given string.
+ * 
+ * ```rust
+ * use atoms::Parser;
+ * let text = "(this is a series of symbols)";
+ * let parser = Parser::new(&text);
+ * let parsed = parser.parse_basic();
+ * ```
+ * 
+ * The type parameter given to `Parser::parse` is to inform the parser of 
+ * how to evaluate symbols. Any type that implements `ToString` and `FromStr`
+ * reflexively can be used here. `String` is just one such, however it would 
+ * be trivial to create an `enum` that restricted parsing to pre-defined
+ * symbols.
+ *
+ * A parser has to be attached to a particular `str` to parse it. Really, this
+ * is to allow us to make sane error messages.
  */
 pub struct Parser<'a> {
     source: &'a str,
@@ -51,7 +69,7 @@ pub struct Parser<'a> {
 
 impl<'a> Parser<'a> {
     /**
-     * Create a new parser for a given string
+     * Create a new parser for a specific `str`
      */
     pub fn new(source: &'a AsRef<str>) -> Parser<'a> {
         let source_ref = source.as_ref();
@@ -62,7 +80,24 @@ impl<'a> Parser<'a> {
     }
 
     /**
-     * Parse the given string. Consumes the parser.
+     * Parse the given `str`. Consumes the parser.
+     * 
+     * ```rust
+     * use atoms::Parser;
+     * let text = "(this is a series of symbols)";
+     * let parser = Parser::new(&text);
+     * let parsed = parser.parse::<String>();
+     * ```
+     *
+     * This parser must be informed of how to represent symbols when they are
+     * parsed. The `Sym` type parameter must implement `FromStr` and `ToString`
+     * reflexively (i.e. the output of `ToString::to_string` for a given value
+     * **must** produce the same value when used with `FromStr::from_str` and
+     * visa versa such that the value can be encoded and decoded the same way).
+     * If no special treatment of symbols is required, `parse_basic` should be
+     * used.
+     *
+     * This will produce parsing errors when `FromStr::from_str` fails.
      */
     pub fn parse<Sym: Sized + ToString + FromStr>(self) -> ParseResult<Value<Sym>> {
         let mut chars = self.source.chars().enumerate().peekable();
@@ -80,6 +115,23 @@ impl<'a> Parser<'a> {
         } else {
             result
         }
+    }
+
+    /**
+     * Parse the given `str` storing symbols as `String`s. Cosumes the parser.
+     * 
+     * ```rust
+     * use atoms::Parser;
+     * let text = "(this is a series of symbols)";
+     * let parser = Parser::new(&text);
+     * let parsed = parser.parse::<String>();
+     * ```
+     *
+     * In cases where no special behaviour for symbols is needed, `parse_basic`
+     * will resolve all symbols as `String`s.
+     */
+    pub fn parse_basic(self) -> ParseResult<StringValue> {
+        self.parse::<String>()
     }
 
     /**
