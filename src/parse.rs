@@ -38,6 +38,10 @@ macro_rules! cons_err {
     }}
 }
 
+macro_rules! end_of_file {
+    ( $me:ident ) => {ParseError::err("Unexpected end of file", $me.source, $me.source.len())}
+}
+
 /**
  * A parser for a particular string.
  */
@@ -98,8 +102,6 @@ impl<'a> Parser<'a> {
                 },
                 // End of Cons
                 ')' => ParseError::err("Unexpected close brace", self.source, pos),
-                // Cons join
-                '.' => ParseError::err("Unexpected cons join", self.source, pos),
                 // Extension
                 '#' => ParseError::err("Extensions are not yet implemented", self.source, pos),
                 // Quoting
@@ -110,14 +112,14 @@ impl<'a> Parser<'a> {
                 _   => self.parse_value(chars),
             }
         } else {
-            ParseError::err("No s-expression found", self.source, self.source.len())
+            end_of_file!(self)
         }
     }
 
     /**
      * Parse a Cons
      */
-    fn parse_cons<Sym: Sized + ToString + FromStr>(&self, chars: &mut CharSource) 
+    fn parse_cons<Sym: Sized + ToString + FromStr>(&self, chars: &mut CharSource)
         -> ParseResult<Value<Sym>> {
         let left = try!(cons_side!(self, chars, {self.parse_expression(chars)}, ')' => {
             chars.next();
@@ -133,22 +135,40 @@ impl<'a> Parser<'a> {
                     Ok(Value::Nil)
                 },
                 '.' => {
-                    chars.next();
-                    let value = cons_err!(self, chars, ')' => "Cons closed without right side");
-                    consume_comments(chars);
-                    if let Some((pos, c)) = chars.next() {
-                        if c != ')' {
-                            ParseError::err("Error finding close of cons", self.source, pos)
-                        } else {
-                            value
-                        }
-                    } else {
-                        ParseError::err("Unexpected end of file", self.source, self.source.len())
-                    }
+                    self.parse_cons_rest(chars)
                 }
             ));
 
             Ok(Value::cons(left, right))
+        }
+    }
+
+    fn parse_cons_rest<Sym: Sized + ToString + FromStr>(&self, chars: &mut CharSource)
+        -> ParseResult<Value<Sym>> {
+        let &(pos, _) = chars.peek().unwrap();
+        let next_val = try!(self.unescape_value(chars));
+
+        if next_val == "." {
+            // Cons join
+            consume_comments(chars);
+            let value = cons_err!(self, chars, 
+                ')' => "Cons closed without right side"
+            );
+            if let Some((pos, c)) = chars.next() {
+                if c != ')' {
+                    ParseError::err("Error finding close of cons", self.source, pos)
+                } else {
+                    value
+                }
+            } else {
+                end_of_file!(self)
+            }
+        } else {
+            // List
+            Ok(Value::cons(
+                try!(self.value_from_string(&next_val, pos)),
+                try!(self.parse_cons(chars))
+            ))
         }
     }
 
@@ -181,7 +201,7 @@ impl<'a> Parser<'a> {
         if allow_eof {
             Ok(value)
         } else {
-            ParseError::err("Unexpected end of file", self.source, self.source.len())
+            end_of_file!(self)
         }
     }
 
@@ -228,7 +248,14 @@ impl<'a> Parser<'a> {
         -> ParseResult<Value<Sym>> {
         let &(pos, _) = chars.peek().unwrap();
         let text = try!(self.unescape_value(chars));
+        self.value_from_string(&text, pos)
+    }
 
+    /**
+     * Parse a string into a value
+     */
+    fn value_from_string<Sym: Sized + ToString + FromStr>(&self, text: &str, pos: usize) 
+        -> ParseResult<Value<Sym>> {
         // Try make an integer
         match i64::from_str(&text) {
             Ok(i) => return Ok(Value::int(i)),
@@ -398,6 +425,23 @@ fn escape_parsing_test() {
 #[test]
 fn cons_parsing() {
     let text = "(one . (two . (three . four)))";
+    let output = Value::cons(
+        Value::symbol("one").unwrap(), 
+        Value::cons(
+            Value::symbol("two").unwrap(),
+            Value::cons(
+                Value::symbol("three").unwrap(),
+                Value::symbol("four").unwrap(),
+            ),
+        ),
+    );
+    let parser = Parser::new(&text);
+    assert_eq!(parser.parse::<String>().unwrap(), output);
+}
+
+#[test]
+fn trailing_cons() {
+    let text = "(one two three . four)";
     let output = Value::cons(
         Value::symbol("one").unwrap(), 
         Value::cons(

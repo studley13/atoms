@@ -91,6 +91,15 @@ impl<Sym: Sized + ToString + FromStr> Value<Sym> {
             _ => false,
         }
     }
+
+    /// Check is a vlue is a list
+    pub fn is_list(&self) -> bool {
+        match *self {
+            Value::Nil => true,
+            Value::Cons(_, ref right) => right.is_list(),
+            _ => false,
+        }
+    }
 }
 
 impl<Sym> Display for Value<Sym> where Sym: ToString + FromStr + Sized {
@@ -130,7 +139,7 @@ fn display_cons<Sym: ToString + FromStr + Sized>(left: &Value<Sym>,
             try!(write!(f, " "));
             display_cons(left, right, false, f)
         }
-        _ => write!(f, " . {})", right)
+        _ => write!(f, " . {})", right),
     }
 }
 
@@ -166,4 +175,14 @@ fn value_fmt_test() {
         Value::<String>::string("text"),
         Value::<String>::symbol("symbol").unwrap(),
     ])), "(13 13.333 \"text\" symbol)");
+    assert_eq!(format!("{:?}", Value::<String>::cons(
+        Value::int(13),
+        Value::cons(
+            Value::float(13.333),
+            Value::cons(
+                Value::string("text"),
+                Value::symbol("symbol").unwrap()
+            )
+        )
+    )), "(13 13.333 \"text\" . symbol)");
 }
