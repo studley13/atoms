@@ -33,7 +33,6 @@ use std::fmt::{self, Display, Debug, Formatter};
  * );
  * ```
  */
-#[allow(dead_code)]
 pub type StringValue = Value<String>;
 
 /** 
