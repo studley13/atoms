@@ -119,7 +119,7 @@ impl<'a> Parser<'a> {
         // Remove leading whitespace
         consume_comments(&mut chars);
 
-        let result = self.parse_expression(&mut chars);
+        let result = try!(self.parse_expression(&mut chars));
 
         // Remove trailing whitespace
         consume_comments(&mut chars);
@@ -127,7 +127,7 @@ impl<'a> Parser<'a> {
         if let Some((pos, _)) = chars.next() {
             ParseError::err("Trailing garbage text", self.source, pos)
         } else {
-            result
+            Ok(result)
         }
     }
 
@@ -547,4 +547,13 @@ fn split_cons() {
     let text = "(one . two . three . four)";
     let parser = Parser::new(&text);
     assert!(parser.parse::<String>().is_err());
+}
+
+#[test]
+fn github_issues() {
+    fn parse_text(text: &'static str) -> ParseResult<StringValue> {
+        let parser = Parser::new(&text);
+        parser.parse::<String>()
+    }
+    assert!(parse_text("(a #;(c d) e)").is_err());
 }
