@@ -858,7 +858,7 @@ impl<Sym: FromStr> AutoValue<Sym> for String {
  * # Cons, List, and Nil
  *
  * These all work much the same way they do in Lisp. Cons are joined with a `.`,
- * lists and cons are bound between '(' and ')', and nil is simply `()`. One
+ * lists and cons are bound between `(` and `)`, and nil is simply `()`. One
  * important thing to note is that constructs like `(1 2 3 . 4)` have to be
  * constructed from explicit cons cells.
  *
