@@ -5,6 +5,7 @@
 
 use std::str::FromStr;
 use std::fmt::{self, Display, Debug, Formatter};
+use std::ops::Deref;
 
 /**
  * A single values with symbols represented using `String`.
@@ -65,7 +66,7 @@ pub type StringValue = Value<String>;
  * ```
  */
 #[derive(PartialEq, Clone, PartialOrd)]
-pub enum Value<Sym: Sized + ToString + FromStr> {
+pub enum Value<Sym> {
     /// S-expression in data mode
     Data(Box<Value<Sym>>),
     /// S-expression in code mode
@@ -84,7 +85,14 @@ pub enum Value<Sym: Sized + ToString + FromStr> {
     Nil,
 }
 
-impl<Sym: Sized + ToString + FromStr> Value<Sym> {
+impl<Sym: FromStr> Value<Sym> {
+
+    /**
+     * Automatically convert value
+     */
+    pub fn auto<T>(value: T) -> Value<Sym> where T: AutoValue<Sym> {
+        value.auto()
+    }
 
     /** 
      * Create a new symbol from a string.
@@ -257,6 +265,39 @@ impl<Sym: Sized + ToString + FromStr> Value<Sym> {
     }
 
     /**
+     * Mark a value as code
+     */
+    pub fn code<V: Into<Value<Sym>>>(value: V) -> Value<Sym> {
+        Value::Code(Box::new(value.into()))
+    }
+
+    /**
+     * Mark a value as data
+     */
+    pub fn data<V: Into<Value<Sym>>>(value: V) -> Value<Sym> {
+        Value::Data(Box::new(value.into()))
+    }
+
+    /**
+     * Check if a value is a cons
+     *
+     * ```rust
+     * use atoms::StringValue;
+     * assert!(StringValue::cons(
+     *     StringValue::nil(),
+     *     StringValue::nil()
+     *  ).is_cons());
+     * assert!(!StringValue::nil().is_cons());
+     * ```
+     */
+    pub fn is_cons(&self) -> bool {
+        match *self {
+            Value::Cons(_, _) => true,
+            _ => false,
+        }
+    }
+
+    /**
      * Check if a value is a valid list.
      *
      * A value is a list if:
@@ -339,7 +380,7 @@ impl<Sym: Sized + ToString + FromStr> Value<Sym> {
     /**
      * Returns if this value contains mutli-mode data
      */
-    pub fn multimode(&self) -> bool {
+    pub fn is_multimode(&self) -> bool {
         match *self {
             Value::Data(ref contents) => contents.code_children(),
             _ => false
@@ -361,7 +402,17 @@ impl<Sym: Sized + ToString + FromStr> Value<Sym> {
     }
 }
 
-impl<Sym> Display for Value<Sym> where Sym: ToString + FromStr + Sized {
+impl<Sym> AsRef<Value<Sym>> for Value<Sym> {
+    fn as_ref(&self) -> &Self {
+        match *self {
+            Value::Data(ref data) => data,
+            Value::Code(ref code) => code,
+            _ => self
+        }
+    }
+}
+
+impl<Sym> Display for Value<Sym> where Sym: ToString + FromStr {
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
         match *self {
             Value::Cons(ref left, ref right) => display_cons(left, right, true, f),
@@ -371,22 +422,26 @@ impl<Sym> Display for Value<Sym> where Sym: ToString + FromStr + Sized {
             Value::Float(ref fl) => format_float(f, *fl),
             Value::Nil => write!(f, "()"),
             // TODO: Apply quoting
-            Value::Data(ref data) => write!(f, "{}", data),
+            Value::Data(ref data) => 
+                if self.is_multimode() {
+                    write!(f, "{}", MultiMode::new(self))
+                } else {
+                    write!(f, "'{}", data)
+                },
             Value::Code(ref code) => write!(f, "{}", code),
         }
     }
 }
 
-impl<Sym> Debug for Value<Sym> where Sym: ToString + FromStr + Sized {
+impl<Sym> Debug for Value<Sym> where Sym: ToString + FromStr {
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
         write!(f, "{}", self)
     }
 }
 
-fn display_cons<Sym: ToString + FromStr + Sized>(left: &Value<Sym>, 
-                                                 right: &Value<Sym>, 
-                                                 root: bool, f: &mut Formatter) 
-    -> Result<(), fmt::Error> {
+fn display_cons<Sym>(left: &Value<Sym>, right: &Value<Sym>, root: bool, f: &mut Formatter) 
+    -> Result<(), fmt::Error> where Sym: ToString + FromStr {
+
     if root {
         try!(write!(f, "("));
     }
@@ -420,6 +475,193 @@ fn format_float<F: Into<f64>>(f: &mut Formatter, fl: F) -> Result<(), fmt::Error
     }
 }
 
+/**
+ * A helper struct that wraps a value to assist in multimode rendering, i.e.
+ * ensures that quasiqutoing is rendered properly
+ */
+#[derive(PartialEq, PartialOrd)]
+struct MultiMode<'a, Sym: 'a + ToString + FromStr> {
+    value: &'a Value<Sym>,
+    is_data: bool,
+    declare_mode: bool,
+}
+
+impl<'a, Sym: 'a + FromStr + ToString> MultiMode<'a, Sym> {
+    /**
+     * Create a new nultimode-tagged value. We assume that this is
+     * only used to the root of a data expression that contains code
+     * expressions.
+     */
+    fn new(data: &'a Value<Sym>) -> Self {
+        match *data {
+            Value::Data(_) => MultiMode {
+                value: data,
+                is_data: true,
+                declare_mode: true
+            },
+            _ => panic!("Multimode::new only to be used on Value::Data"),
+        }
+    }
+
+    /**
+     * Used to wrap a child value dependent on the mode of parent
+     */
+    fn wrap_child<'b>(&self, child: &'b Value<Sym>) -> MultiMode<'b, Sym> {
+        let mode_flip = match *child {
+            Value::Data(_) => !self.is_data,
+            Value::Code(_) => self.is_data,
+            _ => false,
+        };
+
+        MultiMode {
+            value: child,
+            is_data: self.is_data ^ mode_flip,
+            declare_mode: mode_flip,
+        }
+    }
+}
+
+impl<'a, Sym: 'a + ToString + FromStr> Display for MultiMode<'a, Sym> {
+
+    /*
+     * This is implemented such that once we are displaying something tagged as 
+     * multimode, we will never call the `Display` on a `Value::Data` or 
+     * `Value::Code` directly but will always unwrap them. This ensures that we
+     * never end up with multiple layers of multi-mode.
+     */
+    fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
+        if self.declare_mode {
+            // Explicitly display the mode switch
+            match *self.value {
+                Value::Data(ref data) =>
+                    write!(f, "`{}", self.wrap_child(data)),
+                Value::Code(ref code) => 
+                    write!(f, ",{}", self.wrap_child(code)),
+                _ => unreachable!(),
+            }
+        } else if let Value::Cons(ref left, ref right) = *self.value {
+            // Render out a cons
+            display_cons_multimode(
+                self.wrap_child(left), 
+                self.wrap_child(right), 
+                true, 
+                f
+            )
+        } else {
+            // Display all other simple values
+            match *self.value {
+                Value::Data(ref data) =>
+                    write!(f, "{}", self.wrap_child(data)),
+                Value::Code(ref code) => 
+                    write!(f, "{}", self.wrap_child(code)),
+                _ => write!(f, "{}", self.value),
+            }
+        }
+    }
+}
+
+impl<'a, Sym: 'a + ToString + FromStr> Debug for MultiMode<'a, Sym> {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
+        write!(f, "{}", self)
+    }
+}
+
+fn display_cons_multimode<Sym>(left: MultiMode<Sym>, right: MultiMode<Sym>, root: bool, f: &mut Formatter) 
+    -> Result<(), fmt::Error> where Sym: ToString + FromStr {
+
+    if root {
+        try!(write!(f, "("));
+    }
+
+    // Write the left value
+    try!(write!(f, "{}", left));
+
+    // Write the right value
+    match *right {
+        Value::Nil => write!(f, ")"),
+        Value::Cons(ref i_left, ref i_right) => {
+            try!(write!(f, " "));
+            display_cons_multimode(
+                right.wrap_child(i_left), 
+                right.wrap_child(i_right), 
+                false, 
+                f
+            )
+        }
+        _ => write!(f, " . {})", right),
+    }
+}
+
+impl<'a, Sym: FromStr + ToString + Sized> Deref for MultiMode<'a, Sym> {
+    type Target = Value<Sym>;
+
+    fn deref(&self) -> &Value<Sym> {
+        self.value
+    }
+}
+
+///Automatic Conversion
+pub trait AutoValue<Sym> {
+    fn auto(self) -> Value<Sym>;
+}
+
+impl<Sym: FromStr> AutoValue<Sym> for Value<Sym> {
+    fn auto(self) -> Value<Sym> {
+       self 
+    }
+}
+
+impl<Sym: FromStr> AutoValue<Sym> for i64 {
+    fn auto(self) -> Value<Sym> {
+        Value::int(self)
+    }
+}
+
+impl<Sym: FromStr> AutoValue<Sym> for f64 {
+    fn auto(self) -> Value<Sym> {
+        Value::float(self)
+    }
+}
+
+impl<'a, Sym: FromStr> AutoValue<Sym> for &'a str {
+    fn auto(self) -> Value<Sym> {
+        Value::string(self)
+    }
+}
+
+#[macro_export]
+macro_rules! s_tree {
+    ($t:ident: ()) => {
+        $t::nil();
+    };
+    ($t:ident: ($l:tt . $r:tt)) => {
+        $t::cons(s_tree!($t: $l), s_tree!($t: $r))
+    };
+    ($t:ident: ($($i:tt)*)) => {
+        $t::list(vec![
+            $(s_tree!($t: $i)),*
+        ])
+    };
+    ($t:ident: [d:$v:tt]) => {
+        $t::data(s_tree!($t: $v))
+    };
+    ($t:ident: [c:$v:tt]) => {
+        $t::code(s_tree!($t: $v))
+    };
+    ($t:ident: [s:$v:tt]) => {
+        $t::symbol($v).unwrap()
+    };
+    ($t:ident: [$v:tt]) => {
+        $t::symbol(stringify!($v)).unwrap()
+    };
+    ($t:ident: [$k:ident:$v:expr]) => {
+        $t::$k($v)
+    };
+    ($t:ident: $v:expr) => {
+        $t::auto($v)
+    };
+}
+
 #[test]
 fn value_fmt_test() {
     assert_eq!(format!("{:?}", Value::<String>::int(13)), "13");
@@ -432,12 +674,14 @@ fn value_fmt_test() {
     assert_eq!(format!("{:?}", Value::<String>::string("hello\tthere\nfriend")), "\"hello\\tthere\\nfriend\"");
     assert_eq!(format!("{:?}", Value::<String>::symbol("text").unwrap()), "text");
     assert_eq!(format!("{:?}", Value::<String>::symbol("hello\tthere\nfriend").unwrap()), "hello\\tthere\\nfriend");
-    assert_eq!(format!("{:?}", Value::<String>::list(vec![
-        Value::<String>::int(13),
-        Value::<String>::float(13.333),
-        Value::<String>::string("text"),
-        Value::<String>::symbol("symbol").unwrap(),
-    ])), "(13 13.333 \"text\" symbol)");
+    assert_eq!(
+        format!("{:?}", s_tree!(StringValue: (13 13.333 "text" [symbol]))), 
+        "(13 13.333 \"text\" symbol)"
+    );
+    assert_eq!(
+        format!("{:?}", s_tree!(StringValue: (13 . (13.333 . ("text" . [symbol]))))),
+        "(13 13.333 \"text\" . symbol)"
+    );
     assert_eq!(format!("{:?}", Value::<String>::cons(
         Value::int(13),
         Value::cons(
@@ -448,4 +692,29 @@ fn value_fmt_test() {
             )
         )
     )), "(13 13.333 \"text\" . symbol)");
+}
+
+#[test]
+fn render_multimode() {
+    assert_eq!(format!(
+        "{:?}", 
+        StringValue::code(StringValue::list(vec![
+            StringValue::data(StringValue::symbol("test").unwrap()),
+            StringValue::data(StringValue::list(vec![
+                StringValue::symbol("this").unwrap(),
+                StringValue::symbol("is").unwrap(),
+                StringValue::code(StringValue::symbol("not").unwrap()),
+                StringValue::symbol("data").unwrap(),
+            ])),
+            StringValue::symbol("code?").unwrap(),
+        ]))
+    ), "('test `(this is ,not data) code?)");
+    assert_eq!(format!(
+        "{:?}", 
+        s_tree!(StringValue: (
+            [d:[test]] 
+            [d:([this] [is] [c:[not]] [data] [int:61])] 
+            [s:"code"]
+        ))
+    ), "('test `(this is ,not data 61) code)");
 }

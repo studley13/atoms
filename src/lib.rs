@@ -64,9 +64,10 @@
 
 extern crate unescape;
 
+#[macro_use]
+mod value;
 mod parse;
 mod error;
-mod value;
 
 pub use value::{Value, StringValue};
 pub use parse::Parser;
