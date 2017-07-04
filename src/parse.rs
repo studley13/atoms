@@ -1,7 +1,7 @@
 //! Functions related to parsing of input
 
-use error::{ParseError, ParseResult};
 use value::{Value, StringValue};
+use error::{ParseError, ParseResult};
 
 use unescape::unescape;
 
@@ -538,8 +538,11 @@ fn trailing_cons() {
             ),
         ),
     );
-    let parser = Parser::new(&text);
-    assert_eq!(parser.parse::<String>().unwrap(), output);
+    let two = StringValue::symbol("one").unwrap();
+    let output_short = s_tree!(StringValue: (two . ([two] . ([three] . [four]))));
+    let parsed = Parser::new(&text).parse::<String>().unwrap();
+    assert_eq!(parsed, output);
+    assert_eq!(parsed, output_short);
 }
 
 #[test]
