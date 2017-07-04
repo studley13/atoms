@@ -627,4 +627,8 @@ fn quasiquoting() {
         parse_text("('\\;comment \nshould probably work...)"), 
         s_tree!(StringValue: ([d:[s:";comment"]] [should] [probably] [s:"work..."]))
     );
+    assert_eq!(
+        parse_text("`,`,`,`,`,data"), 
+        s_tree!(StringValue: [d:[c:[d:[c:[d:[c:[d:[c:[d:[c:[data]]]]]]]]]]])
+    );
 }
