@@ -113,7 +113,7 @@ impl<'a> Parser<'a> {
      *
      * This will produce parsing errors when `FromStr::from_str` fails.
      */
-    pub fn parse<Sym: Sized + ToString + FromStr>(self) -> ParseResult<Value<Sym>> {
+    pub fn parse<Sym: FromStr>(self) -> ParseResult<Value<Sym>> {
         let mut chars = self.source.chars().enumerate().peekable();
         
         // Remove leading whitespace
@@ -158,7 +158,7 @@ impl<'a> Parser<'a> {
     /**
      * Parse a single sexpression
      */
-    fn parse_expression<Sym: Sized + ToString + FromStr>(&self, chars: &mut CharSource) 
+    fn parse_expression<Sym: FromStr>(&self, chars: &mut CharSource) 
         -> ParseResult<Value<Sym>> {
         
         // Consume leading comments
@@ -178,9 +178,18 @@ impl<'a> Parser<'a> {
                 // Extension
                 '#' => ParseError::err("Extensions are not yet implemented", self.source, pos),
                 // Quoting
-                '`' => ParseError::err("Code/data distinction is not yet implemented", self.source, pos),
-                ',' => ParseError::err("Code/data distinction is not yet implemented", self.source, pos),
-                '\'' => ParseError::err("Code/data distinction is not yet implemented", self.source, pos),
+                '\'' => {
+                    chars.next();
+                    Ok(Value::data(try!(self.parse_value(chars))))
+                },
+                '`' => {
+                    chars.next();
+                    Ok(Value::data(try!(self.parse_value(chars))))
+                },
+                ',' => {
+                    chars.next();
+                    Ok(Value::code(try!(self.parse_value(chars))))
+                },
                 // Automatic value
                 _   => self.parse_value(chars),
             }
@@ -192,7 +201,7 @@ impl<'a> Parser<'a> {
     /**
      * Parse a Cons
      */
-    fn parse_cons<Sym: Sized + ToString + FromStr>(&self, chars: &mut CharSource)
+    fn parse_cons<Sym: FromStr>(&self, chars: &mut CharSource)
         -> ParseResult<Value<Sym>> {
         let left = try!(cons_side!(self, chars, {self.parse_expression(chars)}, ')' => {
             chars.next();
@@ -216,7 +225,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_cons_rest<Sym: Sized + ToString + FromStr>(&self, chars: &mut CharSource)
+    fn parse_cons_rest<Sym: FromStr>(&self, chars: &mut CharSource)
         -> ParseResult<Value<Sym>> {
         let &(pos, _) = chars.peek().unwrap();
         let next_val = try!(self.unescape_value(chars));
@@ -281,7 +290,7 @@ impl<'a> Parser<'a> {
     /**
      * Parse a quoted value
      */
-    fn parse_quoted<Sym: Sized + ToString + FromStr>(&self, chars: &mut CharSource) 
+    fn parse_quoted<Sym: FromStr>(&self, chars: &mut CharSource) 
         -> ParseResult<Value<Sym>> {
         // remove leading quote
         let (start_pos, _) = chars.next().unwrap();
@@ -317,7 +326,7 @@ impl<'a> Parser<'a> {
     /**
      * Parse the next value into a type
      */
-    fn parse_value<Sym: Sized + ToString + FromStr>(&self, chars: &mut CharSource) 
+    fn parse_value<Sym: FromStr>(&self, chars: &mut CharSource) 
         -> ParseResult<Value<Sym>> {
         let &(pos, _) = chars.peek().unwrap();
         let text = try!(self.unescape_value(chars));
@@ -327,7 +336,7 @@ impl<'a> Parser<'a> {
     /**
      * Parse a string into a value
      */
-    fn value_from_string<Sym: Sized + ToString + FromStr>(&self, text: &str, pos: usize) 
+    fn value_from_string<Sym: FromStr>(&self, text: &str, pos: usize) 
         -> ParseResult<Value<Sym>> {
         // Try make an integer
         match i64::from_str(&text) {
