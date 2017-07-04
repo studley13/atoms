@@ -596,7 +596,17 @@ fn display_cons<Sym>(left: &Value<Sym>, right: &Value<Sym>, root: bool, f: &mut 
 
 fn escape_string(text: &AsRef<str>) -> String {
     text.as_ref().chars().map(
-        |c| -> String { c.escape_default().collect() }
+        |c| -> String { 
+            match c {
+                '\t' => "\\t".to_string(),
+                '\n' => "\\n".to_string(),
+                '\r' => "\\r".to_string(),
+                '\'' => "\\\'".to_string(),
+                '\"' => "\\\"".to_string(),
+                '\\' => "\\\\".to_string(),
+                _ => c.to_string(),
+            }
+        }
     ).collect()
 }
 
@@ -838,7 +848,10 @@ impl<Sym: FromStr> AutoValue<Sym> for String {
  * use atoms::StringValue;
  *
  * fn main() {
- *     s_tree!(StringValue: (13 "text" 3.1415));
+ *     assert_eq!(
+ *         s_tree!(StringValue: (13 "text" 3.1415)).to_string(),
+ *         "(13 \"text\" 3.1415)"
+ *     );
  * }
  * ```
  * 
@@ -880,7 +893,10 @@ impl<Sym: FromStr> AutoValue<Sym> for String {
  * use atoms::StringValue;
  *
  * fn main() {
- *     s_tree!(StringValue: ([one] [s:"two"] [s:"compleχex"]));
+ *     assert_eq!(
+ *         s_tree!(StringValue: ([one] [s:"two"] [s:"compleχex"])).to_string(),
+ *         "(one two compleχex)"
+ *     )
  * }
  * ```
  *
