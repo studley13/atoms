@@ -89,6 +89,19 @@ impl<Sym: FromStr> Value<Sym> {
 
     /**
      * Automatically convert value
+     *
+     * This automatically creates the most sensible value for the types:
+     *
+     * * `i64`
+     * * `f64`
+     * * `String`
+     *
+     * ```rust
+     * use atoms::StringValue;
+     * assert_eq!(StringValue::auto(13), StringValue::int(13));
+     * assert_eq!(StringValue::auto(3.1415), StringValue::float(3.1415));
+     * assert_eq!(StringValue::auto("Text"), StringValue::string("Text"));
+     * ```
      */
     pub fn auto<T>(value: T) -> Value<Sym> where T: AutoValue<Sym> {
         value.auto()
@@ -266,6 +279,13 @@ impl<Sym: FromStr> Value<Sym> {
 
     /**
      * Mark a value as code
+     *
+     * When using mixed-mode data, this marks an s-expression as code.
+     *
+     * ```rust
+     * use atoms::StringValue;
+     * StringValue::code(StringValue::symbol("map").unwrap()).to_string();
+     * ```
      */
     pub fn code<V: Into<Value<Sym>>>(value: V) -> Value<Sym> {
         Value::Code(Box::new(value.into()))
@@ -273,6 +293,16 @@ impl<Sym: FromStr> Value<Sym> {
 
     /**
      * Mark a value as data
+     *
+     * When using mixed-mode data, this marks an s-expression as data.
+     *
+     * ```rust
+     * use atoms::StringValue;
+     * assert_eq!(
+     *     StringValue::data(StringValue::symbol("apple").unwrap()).to_string(),
+     *     "'apple"
+     * )
+     * ```
      */
     pub fn data<V: Into<Value<Sym>>>(value: V) -> Value<Sym> {
         Value::Data(Box::new(value.into()))
@@ -286,7 +316,7 @@ impl<Sym: FromStr> Value<Sym> {
      * assert!(StringValue::cons(
      *     StringValue::nil(),
      *     StringValue::nil()
-     *  ).is_cons());
+     * ).is_cons());
      * assert!(!StringValue::nil().is_cons());
      * ```
      */
@@ -348,6 +378,19 @@ impl<Sym: FromStr> Value<Sym> {
 
     /**
      * Returns if is a wrapped data value
+     *
+     * ```rust
+     * use atoms::StringValue;
+     * assert!(
+     *     StringValue::data(StringValue::symbol("apple").unwrap()).is_data()
+     * );
+     * assert!(
+     *     !StringValue::code(StringValue::symbol("apple").unwrap()).is_data()
+     * );
+     * assert!(
+     *     !StringValue::symbol("apple").unwrap().is_code()
+     * );
+     * ```
      */
     pub fn is_data(&self) -> bool {
         match *self {
@@ -358,6 +401,19 @@ impl<Sym: FromStr> Value<Sym> {
 
     /**
      * Returns if is a wrapped code value
+     *
+     * ```rust
+     * use atoms::StringValue;
+     * assert!(
+     *     StringValue::code(StringValue::symbol("map").unwrap()).is_code()
+     * );
+     * assert!(
+     *     !StringValue::data(StringValue::symbol("map").unwrap()).is_code()
+     * );
+     * assert!(
+     *     !StringValue::symbol("map").unwrap().is_code()
+     * );
+     * ```
      */
     pub fn is_code(&self) -> bool {
         match *self {
@@ -367,7 +423,28 @@ impl<Sym: FromStr> Value<Sym> {
     }
 
     /**
-     * Unwrap wrapped values
+     * Unwrap code and data values.
+     *
+     * Code and data values are really only tagging their contents. To get the
+     * actual value of any `Value`, you can always `unwrap` it. Note that
+     * `unwrap` only unwraps a single layer, to completey unwrap an entire
+     * s-expression use `unwrap_all`.
+     *
+     * ```rust
+     * use atoms::StringValue;
+     * assert_eq!(
+     *     StringValue::code(StringValue::symbol("inner").unwrap()).unwrap(),
+     *     StringValue::symbol("inner").unwrap()
+     * );
+     * assert_eq!(
+     *     StringValue::data(StringValue::symbol("inner").unwrap()).unwrap(),
+     *     StringValue::symbol("inner").unwrap()
+     * );
+     * assert_eq!(
+     *     StringValue::symbol("inner").unwrap().unwrap(),
+     *     StringValue::symbol("inner").unwrap()
+     * );
+     * ```
      */
     pub fn unwrap(self) -> Value<Sym> {
         match self {
@@ -379,6 +456,26 @@ impl<Sym: FromStr> Value<Sym> {
 
     /**
      * Fully unwrap tree. Unwraps all data and code values.
+     *
+     * This will recursively unwrap an entire s-expression, removing any
+     * information about data or code. To only unwrap the outermost layer,
+     * use `unwrap`.
+     *
+     * ```rust
+     * use atoms::StringValue;
+     * assert_eq!(
+     *     StringValue::code(StringValue::list(vec![
+     *         StringValue::data(StringValue::auto(14)),
+     *         StringValue::data(StringValue::auto(13.000)),
+     *         StringValue::auto("twelve"),
+     *     ])).unwrap_full(),
+     *     StringValue::list(vec![
+     *         StringValue::auto(14),
+     *         StringValue::auto(13.000),
+     *         StringValue::auto("twelve"),
+     *     ])
+     * );
+     * ```
      */
     pub fn unwrap_full(self) -> Value<Sym> {
         match self {
@@ -394,7 +491,28 @@ impl<Sym: FromStr> Value<Sym> {
     }
 
     /**
-     * Returns if this value contains mutli-mode data
+     * Is a multimode data s-expression
+     *
+     * This will return true if the given value is explicitly tagged as data
+     * and contains children at any level that are code.
+     *
+     * ```rust
+     * use atoms::StringValue;
+     * assert!(
+     *     StringValue::data(StringValue::list(vec![
+     *         StringValue::code(StringValue::auto(14)),
+     *         StringValue::code(StringValue::auto(13.000)),
+     *         StringValue::auto("twelve"),
+     *     ])).is_multimode()
+     * );
+     * assert!(
+     *     !StringValue::data(StringValue::list(vec![
+     *         StringValue::auto(14),
+     *         StringValue::auto(13.000),
+     *         StringValue::auto("twelve"),
+     *     ])).is_multimode()
+     * );
+     * ```
      */
     pub fn is_multimode(&self) -> bool {
         match *self {
@@ -645,6 +763,152 @@ impl<'a, Sym: FromStr> AutoValue<Sym> for &'a str {
     }
 }
 
+impl<Sym: FromStr> AutoValue<Sym> for String {
+    fn auto(self) -> Value<Sym> {
+        Value::string(self)
+    }
+}
+
+/**
+ * Inlining s-expressions
+ *
+ * This macro makes it trivial to inline s-expressions. For example, to inline
+ * the s-expression:
+ *
+ * ```lisp
+ * (the 'quick brown `(fox ,jumped over the 3 "lazy"  dogs ,(aged 42.5)))
+ * ```
+ *
+ * The following macro could be used (in this case we are using `StringValue`
+ * as the value type):
+ *
+ * ```rust
+ * #[macro_use]
+ * extern crate atoms;
+ *
+ * use atoms::{StringValue, Parser};
+ *
+ * fn main() {
+ *     let val = Parser::new(
+ *         &"(the 'quick brown `(fox ,jumped over the 3 \"lazy\"  dogs ,(aged 42.5)))"
+ *     ).parse::<String>().unwrap();
+ *     let inline = s_tree!(StringValue:
+ *         ([the] [d:[quick]] [brown] [d:(
+ *             [fox] [c:[jumped]] [over] [the] 3 "lazy" [dogs] [c:(
+ *                 [aged] 42.5
+ *             )]
+ *         )])
+ *     );
+ *     assert_eq!(val, inline);
+ * }
+ * ```
+ *
+ * # Structure
+ *
+ * The first part of the macro tells it what type to load the expression as and
+ * must be some kind of `Value`. This is followed by a literal `:` and then the
+ * expressions itself.
+ *
+ * ```rust
+ * #[macro_use]
+ * extern crate atoms;
+ *
+ * use atoms::StringValue;
+ *
+ * fn main() {
+ *     s_tree!(StringValue: (1 2 3 4 5 6));
+ * }
+ * ```
+ *
+ * # Automatic Conversion
+ *
+ * The following types get automatically converted, whether they are literals or 
+ * variables:
+ *
+ * * `String`
+ * * `i64`
+ * * `f64`
+ *
+ * This means you can just place them in your expression as-is.
+ *
+ * ```rust
+ * #[macro_use]
+ * extern crate atoms;
+ *
+ * use atoms::StringValue;
+ *
+ * fn main() {
+ *     s_tree!(StringValue: (13 "text" 3.1415));
+ * }
+ * ```
+ * 
+ * # Cons, List, and Nil
+ *
+ * These all work much the same way they do in Lisp. Cons are joined with a `.`,
+ * lists and cons are bound between '(' and ')', and nil is simply `()`. One
+ * important thing to note is that constructs like `(1 2 3 . 4)` have to be
+ * constructed from explicit cons cells.
+ *
+ * ```rust
+ * #[macro_use]
+ * extern crate atoms;
+ *
+ * use atoms::StringValue;
+ *
+ * fn main() {
+ *     s_tree!(StringValue: ());
+ *     s_tree!(StringValue: (1 2 3 4 5));
+ *     s_tree!(StringValue: ((1 . 2) . ((3 . 4) . 5)));
+ *     assert_eq!(
+ *         s_tree!(StringValue: (1 2 3 4 5)),
+ *         s_tree!(StringValue: (1 . (2 . (3 . (4 . (5 . ()))))))
+ *     );
+ * }
+ * ```
+ *
+ * # Symbols
+ *
+ * Symbols can be used in 2 ways. The first is the conversion method, which is
+ * for more complex symbols, is used with a `&str` and involves wrapping it in
+ * a `[s:]` construct. The second form is *quoting* and simply involves
+ * wrapping a series of tokens in `[]`.
+ *
+ * ```rust
+ * #[macro_use]
+ * extern crate atoms;
+ *
+ * use atoms::StringValue;
+ *
+ * fn main() {
+ *     s_tree!(StringValue: ([one] [s:"two"] [s:"compleχex"]));
+ * }
+ * ```
+ *
+ * # Data and Code
+ *
+ * Any value can be tagged as being data or code by wrapping it in the relevant
+ * construct, which are `[d:]` and `[c:]` respectively. 
+ *
+ * ```rust
+ * #[macro_use]
+ * extern crate atoms;
+ *
+ * use atoms::{StringValue, Parser};
+ *
+ * fn main() {
+ *     assert_eq!(
+ *         Parser::new(&"'(this is ,quasiquoted ,(data `0 `12.3))")
+ *             .parse::<String>().unwrap(),
+ *         s_tree!(StringValue: 
+ *             [d:([this] [is] [c:[quasiquoted]] [c:(
+ *                 [data] [d:0] [d:12.3]
+ *             )])]
+ *         )
+ *     );
+ * }
+ * ```
+ *
+ */
 #[macro_export]
 macro_rules! s_tree {
     ($t:ident: ()) => {
