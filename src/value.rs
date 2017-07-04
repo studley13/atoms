@@ -384,7 +384,11 @@ impl<Sym: FromStr> Value<Sym> {
         match self {
             Value::Code(code) => code.unwrap_full(),
             Value::Data(data) => data.unwrap_full(),
-            Value::Cons(left, right) => Value::cons(left.unwrap_full(), right.unwrap_full()),
+            Value::Cons(left, right) => 
+                Value::cons(
+                    left.unwrap_full(), 
+                    right.unwrap_full()
+                ),
             _ => self,
         }
     }
