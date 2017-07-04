@@ -304,6 +304,61 @@ impl<Sym: Sized + ToString + FromStr> Value<Sym> {
             _ => false,
         }
     }
+
+    /**
+     * Returns if is a wrapped data value
+     */
+    pub fn is_data(&self) -> bool {
+        match *self {
+            Value::Data(_) => true,
+            _ => false,
+        }
+    }
+
+    /**
+     * Returns if is a wrapped code value
+     */
+    pub fn is_code(&self) -> bool {
+        match *self {
+            Value::Code(_) => true,
+            _ => false,
+        }
+    }
+
+    /**
+     * Unwrap wrapped values
+     */
+    pub fn unwrap(self) -> Value<Sym> {
+        match self {
+            Value::Code(code) => code.unwrap(),
+            Value::Data(data) => data.unwrap(),
+            other => other,
+        }
+    }
+
+    /**
+     * Returns if this value contains mutli-mode data
+     */
+    pub fn multimode(&self) -> bool {
+        match *self {
+            Value::Data(ref contents) => contents.code_children(),
+            _ => false
+        }
+    }
+
+    /**
+     * Finds any child in code mode
+     */
+    fn code_children(&self) -> bool {
+        match *self {
+            Value::Code(_) => true,
+            Value::Data(ref child) => 
+                child.code_children(),
+            Value::Cons(ref left, ref right) => 
+                left.code_children() || right.code_children(),
+            _ => false
+        }
+    }
 }
 
 impl<Sym> Display for Value<Sym> where Sym: ToString + FromStr + Sized {
