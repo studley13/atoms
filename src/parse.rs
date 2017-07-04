@@ -164,6 +164,13 @@ impl<'a> Parser<'a> {
         // Consume leading comments
         consume_comments(chars);
 
+        self.parse_immediate(chars)
+    }
+
+    /**
+     * Parse the next immediate expression
+     */
+    fn parse_immediate<Sym: FromStr>(&self, chars: &mut CharSource) -> ParseResult<Value<Sym>> {
         if let Some(&(pos, c)) = chars.peek() {
             match c {
                 // String literal
@@ -180,15 +187,15 @@ impl<'a> Parser<'a> {
                 // Quoting
                 '\'' => {
                     chars.next();
-                    Ok(Value::data(try!(self.parse_value(chars))))
+                    Ok(Value::data(try!(self.parse_immediate(chars))))
                 },
                 '`' => {
                     chars.next();
-                    Ok(Value::data(try!(self.parse_value(chars))))
+                    Ok(Value::data(try!(self.parse_immediate(chars))))
                 },
                 ',' => {
                     chars.next();
-                    Ok(Value::code(try!(self.parse_value(chars))))
+                    Ok(Value::code(try!(self.parse_immediate(chars))))
                 },
                 // Automatic value
                 _   => self.parse_value(chars),
@@ -309,7 +316,7 @@ impl<'a> Parser<'a> {
      */
     fn unescape_value(&self, chars: &mut CharSource) -> ParseResult<String> {
         let &(pos, _) = chars.peek().unwrap();
-        self.parse_text(&try!(self.extract_delimited(chars, &default_delimit, true)).replace("\\ ", " "), pos)
+        self.parse_text(&try!(self.extract_delimited(chars, &default_delimit, true)).escape_special(), pos)
     }
 
     /**
@@ -351,11 +358,30 @@ impl<'a> Parser<'a> {
         }
 
         // Try make a symbol
-        if let Some(sym) = Value::symbol(&text) {
+        if text.len() == 0usize {
+            ParseError::err("Empty symbol error", self.source, pos)
+        } else if let Some(sym) = Value::symbol(&text) {
             Ok(sym)
         } else {
             ParseError::err("Error resolving symbol", self.source, pos)
         }
+    }
+}
+
+/**
+ * Additional characters to escape in strings
+ */
+trait EscapeSpecial {
+    fn escape_special(self) -> Self;
+}
+
+impl EscapeSpecial for String {
+    fn escape_special(self) -> String {
+        self.replace("\\ ", " ")
+            .replace("\\;", ";")
+            .replace("\\(", "(")
+            .replace("\\)", ")")
+            .replace("\\\"", "\"")
     }
 }
 
@@ -568,4 +594,37 @@ fn github_issues() {
         parser.parse::<String>()
     }
     assert!(parse_text("(a #;(c d) e)").is_err());
+}
+
+#[test]
+fn quasiquoting() {
+    fn parse_text(text: &'static str) -> StringValue {
+        let parser = Parser::new(&text);
+        parser.parse::<String>().unwrap()
+    }
+
+    assert_eq!(
+        parse_text("(this is 'data)"), 
+        s_tree!(StringValue: ([this] [is] [d:[data]]))
+    );
+    assert_eq!(
+        parse_text("'(this is 'data)"), 
+        s_tree!(StringValue: [d:([this] [is] [d:[data]])])
+    );
+    assert_eq!(
+        parse_text("'(this is ,quasiquoted ,(data that is '2 layers 'deep))"), 
+        s_tree!(StringValue: 
+            [d:([this] [is] [c:[quasiquoted]] [c:(
+                [data] [that] [is] [d:2] [layers] [d:[deep]]
+            )])]
+        )
+    );
+    assert_eq!(
+        parse_text("('this \n;comment here for effect\nshould probably work...)"), 
+        s_tree!(StringValue: ([d:[this]] [should] [probably][s:"work..."]))
+    );
+    assert_eq!(
+        parse_text("('\\;comment \nshould probably work...)"), 
+        s_tree!(StringValue: ([d:[s:";comment"]] [should] [probably] [s:"work..."]))
+    );
 }
