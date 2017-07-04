@@ -66,6 +66,10 @@ pub type StringValue = Value<String>;
  */
 #[derive(PartialEq, Clone, PartialOrd)]
 pub enum Value<Sym: Sized + ToString + FromStr> {
+    /// S-expression in data mode
+    Data(Box<Value<Sym>>),
+    /// S-expression in code mode
+    Code(Box<Value<Sym>>),
     /// A quoted UTF-8 string value
     Str(String),
     /// An unquoted, case-sensitive symbol
@@ -311,6 +315,9 @@ impl<Sym> Display for Value<Sym> where Sym: ToString + FromStr + Sized {
             Value::Int(ref i) => write!(f, "{}", i),
             Value::Float(ref fl) => format_float(f, *fl),
             Value::Nil => write!(f, "()"),
+            // TODO: Apply quoting
+            Value::Data(ref data) => write!(f, "{}", data),
+            Value::Code(ref code) => write!(f, "{}", code),
         }
     }
 }
