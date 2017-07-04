@@ -631,4 +631,12 @@ fn quasiquoting() {
         parse_text("`,`,`,`,`,data"), 
         s_tree!(StringValue: [d:[c:[d:[c:[d:[c:[d:[c:[d:[c:[data]]]]]]]]]]])
     );
+    assert_eq!(
+        parse_text("`,`,`,`,`,data").unwrap_full(), 
+        s_tree!(StringValue: [data])
+    );
+    assert_eq!(
+        parse_text("`(,(left `right . `last) ,middle end)").unwrap_full(), 
+        s_tree!(StringValue: (([left] . ([right] . [last])) [middle] [end]))
+    );
 }
