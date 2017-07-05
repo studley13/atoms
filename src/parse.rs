@@ -84,7 +84,7 @@ pub struct Parser<R> {
 
 impl<'a> Parser<&'a [u8]> {
     /**
-     * Create a new parser for a specific `str`
+     * Create a new parser for a single expression
      */
     pub fn new<'b>(source: &'b AsRef<[u8]>) -> Parser<&'b [u8]> {
         Parser::reader(source.as_ref())
@@ -93,7 +93,10 @@ impl<'a> Parser<&'a [u8]> {
 
 impl<R: Read> Parser<R> {
     /**
-     * Create a new parser for a reader
+     * Create a new parser for a reader.
+     *
+     * The reader can can be a source of series of discrete expressions,
+     * each to be read one at a time.
      */
     pub fn reader(source: R) -> Parser<R> {
         Parser {
@@ -105,7 +108,81 @@ impl<R: Read> Parser<R> {
     }
 
     /**
-     * Parse the given `str`. Consumes the parser.
+     * Read the next expression.
+     * 
+     * ```rust
+     * use atoms::{Parser, Value};
+     * let text = r#"
+     *     (this is a series of symbols)
+     *     (this is another sexpression)
+     *     mono ;Single expression on its own line
+     *     (this expression
+     *           spans lines)
+     *     (these expressions) (share lines)
+     * "#;
+     * let mut parser = Parser::new(&text);
+     * assert_eq!(
+     *     parser.read::<String>().unwrap(),
+     *     Value::into_list(
+     *         vec!["this", "is", "a", "series", "of", "symbols"], 
+     *         |s| Value::symbol(s).unwrap()
+     *     )
+     * );
+     * assert_eq!(
+     *     parser.read::<String>().unwrap(),
+     *     Value::into_list(
+     *         vec!["this", "is", "another", "sexpression"], 
+     *         |s| Value::symbol(s).unwrap()
+     *     )
+     * );
+     * assert_eq!(
+     *     parser.read::<String>().unwrap(),
+     *     Value::symbol("mono").unwrap()
+     * );
+     * assert_eq!(
+     *     parser.read::<String>().unwrap(),
+     *     Value::into_list(
+     *         vec!["this", "expression", "spans", "lines"], 
+     *         |s| Value::symbol(s).unwrap()
+     *     )
+     * );
+     * assert_eq!(
+     *     parser.read::<String>().unwrap(),
+     *     Value::into_list(
+     *         vec!["these", "expressions"], 
+     *         |s| Value::symbol(s).unwrap()
+     *     )
+     * );
+     * assert_eq!(
+     *     parser.read::<String>().unwrap(),
+     *     Value::into_list(
+     *         vec!["share", "lines"], 
+     *         |s| Value::symbol(s).unwrap()
+     *     )
+     * );
+     * ```
+     *
+     * This parser must be informed of how to represent symbols when they are
+     * parsed. The `Sym` type parameter must implement `FromStr` and `ToString`
+     * reflexively (i.e. the output of `ToString::to_string` for a given value
+     * **must** produce the same value when used with `FromStr::from_str` and
+     * visa versa such that the value can be encoded and decoded the same way).
+     * If no special treatment of symbols is required, `parse_basic` should be
+     * used.
+     *
+     * This will produce parsing errors when `FromStr::from_str` fails when
+     * being used to create symbols.
+     */
+    pub fn read<Sym: FromStr>(&mut self) -> ParseResult<Value<Sym>> {
+        // Consume the comments
+        self.consume_comments();
+        self.parse_expression()
+    }
+
+    /**
+     * Parse the given expression. Consumes the parser.
+     *
+     * If you want to pass a series of expressions, use `read` instead.
      * 
      * ```rust
      * use atoms::{Parser, Value};
@@ -121,15 +198,8 @@ impl<R: Read> Parser<R> {
      * );
      * ```
      *
-     * This parser must be informed of how to represent symbols when they are
-     * parsed. The `Sym` type parameter must implement `FromStr` and `ToString`
-     * reflexively (i.e. the output of `ToString::to_string` for a given value
-     * **must** produce the same value when used with `FromStr::from_str` and
-     * visa versa such that the value can be encoded and decoded the same way).
-     * If no special treatment of symbols is required, `parse_basic` should be
-     * used.
-     *
-     * This will produce parsing errors when `FromStr::from_str` fails.
+     * Similar to `read`, the parser must be informed of the type to be used
+     * for expressing symbols.
      */
     pub fn parse<Sym: FromStr>(mut self) -> ParseResult<Value<Sym>> {
 
