@@ -18,7 +18,7 @@ macro_rules! parse_err {
 macro_rules! cons_side {
     ( $me:ident, $default:block, $($catch:pat => $catch_result:block),*) => {{
         $me.consume_comments();
-        if let Some(&(_, c)) = $me.peek() {
+        if let Some(&c) = $me.peek() {
             match c {
                 $($catch => $catch_result),*
                 _ => $default,
@@ -32,7 +32,7 @@ macro_rules! cons_side {
 macro_rules! cons_err {
     ( $me:ident, $($err:pat => $err_text:expr),*) => {{
         $me.consume_comments();
-        if let Some(&(pos, c)) = $me.peek() {
+        if let Some(&c) = $me.peek() {
             match c {
                 $($err => parse_err!($err_text, $me),),*
                 _ => $me.parse_expression(),
@@ -77,7 +77,7 @@ macro_rules! end_of_file {
  */
 pub struct Parser<R> {
     reader: BufReader<R>,
-    buffer: VecDeque<(usize, char)>,
+    buffer: VecDeque<char>,
     line: usize,
     col: isize,
 }
@@ -211,7 +211,7 @@ impl<R: Read> Parser<R> {
         // Remove trailing whitespace
         self.consume_comments();
 
-        if let Some((pos, _)) = self.next() {
+        if let Some(_) = self.next() {
             parse_err!("Trailing garbage text", self)
         } else {
             Ok(result)
@@ -238,14 +238,14 @@ impl<R: Read> Parser<R> {
      * In cases where no special behaviour for symbols is needed, `parse_basic`
      * will resolve all symbols as `String`s.
      */
-    pub fn parse_basic(mut self) -> ParseResult<StringValue> {
+    pub fn parse_basic(self) -> ParseResult<StringValue> {
         self.parse::<String>()
     }
 
     /**
      * Peek at the next value in the buffer
      */
-    pub fn peek(&mut self) -> Option<&(usize, char)> {
+    pub fn peek(&mut self) -> Option<&char> {
         if self.buffer.len() <= 0 {
             self.extend_buffer();
         } 
@@ -256,7 +256,7 @@ impl<R: Read> Parser<R> {
     /**
      * Get the next value
      */
-    pub fn next(&mut self) -> Option<(usize, char)> {
+    pub fn next(&mut self) -> Option<char> {
         if self.buffer.len() <= 0 {
             self.extend_buffer();
         } 
@@ -264,14 +264,14 @@ impl<R: Read> Parser<R> {
         let next_c = self.buffer.pop_front();
 
         // Advance position if possible
-        if let Some((p, c)) = next_c {
+        if let Some(c) = next_c {
             if c == '\n' {
                 self.line +=  1;
                 self.col   = -1;
             } else {
                 self.col  +=  1;
             }
-            Some((p, c))
+            Some(c)
         } else {
             None
         }
@@ -282,9 +282,10 @@ impl<R: Read> Parser<R> {
      */
     pub fn extend_buffer(&mut self) {
         let mut line = String::new();
-        self.reader.read_line(&mut line);
-        for t in line.chars().enumerate() {
-            self.buffer.push_back(t);
+        if let Ok(_) = self.reader.read_line(&mut line) {
+            for t in line.chars() {
+                self.buffer.push_back(t);
+            }
         }
     }
 
@@ -304,7 +305,7 @@ impl<R: Read> Parser<R> {
      * Parse the next immediate expression
      */
     fn parse_immediate<Sym: FromStr>(&mut self) -> ParseResult<Value<Sym>> {
-        if let Some(&(pos, c)) = self.peek() {
+        if let Some(&c) = self.peek() {
             match c {
                 // String literal
                 '"' => self.parse_quoted(),
@@ -373,7 +374,7 @@ impl<R: Read> Parser<R> {
             let value = cons_err!(self, 
                 ')' => "Cons closed without right side"
             );
-            if let Some((pos, c)) = self.next() {
+            if let Some(c) = self.next() {
                 if c != ')' {
                     parse_err!("Error finding close of cons", self)
                 } else {
@@ -399,11 +400,11 @@ impl<R: Read> Parser<R> {
         let mut value = String::new();
 
         // Push each following character into the parsed string
-        while let Some(&(pos, preview)) = self.peek() {
+        while let Some(&preview) = self.peek() {
             if preview == '\\' {
-                let (_, c) = self.next().unwrap();
+                let c = self.next().unwrap();
                 value.push(c);
-                if let Some((_, follower)) = self.next() {
+                if let Some(follower) = self.next() {
                     value.push(follower);
                 } else {
                     return parse_err!("Unexpected end of escape sequence", self);
@@ -411,7 +412,7 @@ impl<R: Read> Parser<R> {
             } else if delimiter(preview) {
                 return Ok(value);
             } else {
-                let (_, c) = self.next().unwrap();
+                let c = self.next().unwrap();
                 value.push(c);
             }
         }
@@ -497,7 +498,7 @@ impl<R: Read> Parser<R> {
      * Consume whitespace
      */
     fn consume_whitespace(&mut self) {
-        while let Some(&(_, c)) = self.peek() {
+        while let Some(&c) = self.peek() {
             if c.is_whitespace() {
                 self.next();
             } else {
@@ -510,7 +511,7 @@ impl<R: Read> Parser<R> {
      * Consume the remaining line of text
      */
     fn consume_line(&mut self) {
-        while let Some((_, c)) = self.next() {
+        while let Some(c) = self.next() {
             if c == '\n' { return; }
         }
     }
@@ -520,7 +521,7 @@ impl<R: Read> Parser<R> {
      */
     fn consume_comments(&mut self) {
         self.consume_whitespace();
-        while let Some(&(_, c)) = self.peek() {
+        while let Some(&c) = self.peek() {
             if c == ';' {
                 self.consume_line();
             } else if c.is_whitespace() {

@@ -3,7 +3,7 @@
 #![deny(missing_docs)]
 #![deny(unsafe_code)]
 
-use std::{error, fmt, cmp};
+use std::{error, fmt};
 
 /**
  * Error that occurs when parsing s-expression.
@@ -40,27 +40,6 @@ impl ParseError {
      */
     pub fn err<T>(message: &'static str, line: usize, col: usize) -> ParseResult<T> {
         Err(ParseError::new(message, line, col))
-    }
-
-    /**
-     * Get the specified line and column in the given text that the error
-     * occurred at as a tuple.
-     *
-     * Tuple is in the form `(line, column)`.
-     */
-    #[allow(dead_code)]
-    fn get_location(s: &str, pos: usize) -> (usize, usize) {
-        let mut line: usize = 1;
-        let mut col:  isize = -1;
-        for c in s.chars().take(pos+1) {
-            if c == '\n' {
-                line +=  1;
-                col   = -1;
-            } else {
-                col  +=  1;
-            }
-        }
-        (line, cmp::max(col, 0) as usize)
     }
 }
 
@@ -106,19 +85,4 @@ fn error_display() {
 
     assert_eq!(format!("{:?}", error), "1:4: Unexpected eof");
     assert_eq!(format!("{:?}", Box::new(error)), "1:4: Unexpected eof");
-}
-
-#[test]
-fn error_location() {
-  let s = "0123456789\n0123456789\n\n6";
-  assert_eq!(ParseError::get_location(s, 4), (1, 4));
-
-  assert_eq!(ParseError::get_location(s, 10), (2, 0));
-  assert_eq!(ParseError::get_location(s, 11), (2, 0));
-  assert_eq!(ParseError::get_location(s, 15), (2, 4));
-
-  assert_eq!(ParseError::get_location(s, 21), (3, 0));
-  assert_eq!(ParseError::get_location(s, 22), (4, 0));
-  assert_eq!(ParseError::get_location(s, 23), (4, 0));
-  assert_eq!(ParseError::get_location(s, 500), (4, 0));
 }
