@@ -3,7 +3,7 @@
 #![deny(missing_docs)]
 #![deny(unsafe_code)]
 
-use std::{error, fmt, cmp};
+use std::{error, fmt};
 
 /**
  * Error that occurs when parsing s-expression.
@@ -15,8 +15,6 @@ pub struct ParseError {
     pub line:    usize,
     /// The column number at which the error occurred.
     pub column:  usize,
-    /// The index in the given `str` at which caused the error.
-    pub index:   usize,
 }
 
 impl ParseError {
@@ -25,13 +23,11 @@ impl ParseError {
      * there is no raw error constructor
      */
     #[cold]
-    fn new(message: &'static str, source: &str, pos: usize) -> Err {
-        let (line, column) = ParseError::get_location(source, pos);
+    fn new(message: &'static str, line: usize, col: usize) -> Err {
         Box::new(ParseError {
             message: message,
             line:    line,
-            column:  column,
-            index:   pos,
+            column:  col,
         })
     }
 
@@ -42,28 +38,8 @@ impl ParseError {
      * being parsed and `pos` is the index in the `str` where the parsing error
      * occurred.
      */
-    pub fn err<T>(message: &'static str, source: &str, pos: usize) -> ParseResult<T> {
-        Err(ParseError::new(message, source, pos))
-    }
-
-    /**
-     * Get the specified line and column in the given text that the error
-     * occurred at as a tuple.
-     *
-     * Tuple is in the form `(line, column)`.
-     */
-    fn get_location(s: &str, pos: usize) -> (usize, usize) {
-        let mut line: usize = 1;
-        let mut col:  isize = -1;
-        for c in s.chars().take(pos+1) {
-            if c == '\n' {
-                line +=  1;
-                col   = -1;
-            } else {
-                col  +=  1;
-            }
-        }
-        (line, cmp::max(col, 0) as usize)
+    pub fn err<T>(message: &'static str, line: usize, col: usize) -> ParseResult<T> {
+        Err(ParseError::new(message, line, col))
     }
 }
 
@@ -105,24 +81,8 @@ fn error_display() {
         message: "Unexpected eof",
         line:    1usize,
         column:  4usize,
-        index:   4usize
     };
 
     assert_eq!(format!("{:?}", error), "1:4: Unexpected eof");
     assert_eq!(format!("{:?}", Box::new(error)), "1:4: Unexpected eof");
-}
-
-#[test]
-fn error_location() {
-  let s = "0123456789\n0123456789\n\n6";
-  assert_eq!(ParseError::get_location(s, 4), (1, 4));
-
-  assert_eq!(ParseError::get_location(s, 10), (2, 0));
-  assert_eq!(ParseError::get_location(s, 11), (2, 0));
-  assert_eq!(ParseError::get_location(s, 15), (2, 4));
-
-  assert_eq!(ParseError::get_location(s, 21), (3, 0));
-  assert_eq!(ParseError::get_location(s, 22), (4, 0));
-  assert_eq!(ParseError::get_location(s, 23), (4, 0));
-  assert_eq!(ParseError::get_location(s, 500), (4, 0));
 }

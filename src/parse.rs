@@ -2,44 +2,49 @@
 
 use value::{Value, StringValue};
 use error::{ParseError, ParseResult};
+use std::io::{Read, BufRead, BufReader};
+use std::str::FromStr;
+use std::cmp::max;
+use std::collections::VecDeque;
 
 use unescape::unescape;
 
-use std::str::{Chars, FromStr};
-use std::iter::{Enumerate, Peekable};
-
-type CharSource<'a> = Peekable<Enumerate<Chars<'a>>>;
+macro_rules! parse_err {
+    ( $msg:expr, $me:ident ) => {
+        ParseError::err($msg, $me.line, max($me.col, 0) as usize)
+    }
+}
 
 macro_rules! cons_side {
-    ( $me:ident, $chars:ident, $default:block, $($catch:pat => $catch_result:block),*) => {{
-        consume_comments($chars);
-        if let Some(&(_, c)) = $chars.peek() {
+    ( $me:ident, $default:block, $($catch:pat => $catch_result:block),*) => {{
+        $me.consume_comments();
+        if let Some(&c) = $me.peek() {
             match c {
                 $($catch => $catch_result),*
                 _ => $default,
             }
         } else {
-            ParseError::err("Error parsing cons or list", $me.source, $me.source.len())
+            parse_err!("Error parsing cons or list", $me)
         }
     }}
 }
 
 macro_rules! cons_err {
-    ( $me:ident, $chars:ident, $($err:pat => $err_text:expr),*) => {{
-        consume_comments($chars);
-        if let Some(&(pos, c)) = $chars.peek() {
+    ( $me:ident, $($err:pat => $err_text:expr),*) => {{
+        $me.consume_comments();
+        if let Some(&c) = $me.peek() {
             match c {
-                $($err => ParseError::err($err_text, $me.source, pos),),*
-                _ => $me.parse_expression($chars),
+                $($err => parse_err!($err_text, $me),),*
+                _ => $me.parse_expression(),
             }
         } else {
-            ParseError::err("Error parsing cons or list", $me.source, $me.source.len())
+            parse_err!("Error parsing cons or list", $me)
         }
     }}
 }
 
 macro_rules! end_of_file {
-    ( $me:ident ) => {ParseError::err("Unexpected end of file", $me.source, $me.source.len())}
+    ( $me:ident ) => {parse_err!("Unexpected end of file", $me)}
 }
 
 /**
@@ -70,24 +75,114 @@ macro_rules! end_of_file {
  * A parser has to be attached to a particular `str` to parse it. Really, this
  * is to allow us to make sane error messages.
  */
-pub struct Parser<'a> {
-    source: &'a str,
+pub struct Parser<R> {
+    reader: BufReader<R>,
+    buffer: VecDeque<char>,
+    line: usize,
+    col: isize,
 }
 
-impl<'a> Parser<'a> {
+impl<'a> Parser<&'a [u8]> {
     /**
-     * Create a new parser for a specific `str`
+     * Create a new parser for a single expression
      */
-    pub fn new(source: &'a AsRef<str>) -> Parser<'a> {
-        let source_ref = source.as_ref();
+    pub fn new<'b>(source: &'b AsRef<[u8]>) -> Parser<&'b [u8]> {
+        Parser::reader(source.as_ref())
+    }
+}
 
+impl<R: Read> Parser<R> {
+    /**
+     * Create a new parser for a reader.
+     *
+     * The reader can can be a source of series of discrete expressions,
+     * each to be read one at a time.
+     */
+    pub fn reader(source: R) -> Parser<R> {
         Parser {
-            source: source_ref,
+            reader: BufReader::new(source),
+            buffer: VecDeque::new(),
+            line: 1usize,
+            col: -1isize,
         }
     }
 
     /**
-     * Parse the given `str`. Consumes the parser.
+     * Read the next expression.
+     * 
+     * ```rust
+     * use atoms::{Parser, Value};
+     * let text = r#"
+     *     (this is a series of symbols)
+     *     (this is another sexpression)
+     *     mono ;Single expression on its own line
+     *     (this expression
+     *           spans lines)
+     *     (these expressions) (share lines)
+     * "#;
+     * let mut parser = Parser::new(&text);
+     * assert_eq!(
+     *     parser.read::<String>().unwrap(),
+     *     Value::into_list(
+     *         vec!["this", "is", "a", "series", "of", "symbols"], 
+     *         |s| Value::symbol(s).unwrap()
+     *     )
+     * );
+     * assert_eq!(
+     *     parser.read::<String>().unwrap(),
+     *     Value::into_list(
+     *         vec!["this", "is", "another", "sexpression"], 
+     *         |s| Value::symbol(s).unwrap()
+     *     )
+     * );
+     * assert_eq!(
+     *     parser.read::<String>().unwrap(),
+     *     Value::symbol("mono").unwrap()
+     * );
+     * assert_eq!(
+     *     parser.read::<String>().unwrap(),
+     *     Value::into_list(
+     *         vec!["this", "expression", "spans", "lines"], 
+     *         |s| Value::symbol(s).unwrap()
+     *     )
+     * );
+     * assert_eq!(
+     *     parser.read::<String>().unwrap(),
+     *     Value::into_list(
+     *         vec!["these", "expressions"], 
+     *         |s| Value::symbol(s).unwrap()
+     *     )
+     * );
+     * assert_eq!(
+     *     parser.read::<String>().unwrap(),
+     *     Value::into_list(
+     *         vec!["share", "lines"], 
+     *         |s| Value::symbol(s).unwrap()
+     *     )
+     * );
+     * ```
+     *
+     * This parser must be informed of how to represent symbols when they are
+     * parsed. The `Sym` type parameter must implement `FromStr` and `ToString`
+     * reflexively (i.e. the output of `ToString::to_string` for a given value
+     * **must** produce the same value when used with `FromStr::from_str` and
+     * visa versa such that the value can be encoded and decoded the same way).
+     * If no special treatment of symbols is required, `parse_basic` should be
+     * used.
+     *
+     * This will produce parsing errors when `FromStr::from_str` fails when
+     * being used to create symbols.
+     */
+    pub fn read<Sym: FromStr>(&mut self) -> ParseResult<Value<Sym>> {
+        // Consume the comments
+        self.consume_comments();
+        self.parse_expression()
+    }
+
+    /**
+     * Parse the given expression. Consumes the parser.
+     *
+     * If you want to pass a series of expressions, use `read` instead.
      * 
      * ```rust
      * use atoms::{Parser, Value};
@@ -103,29 +198,21 @@ impl<'a> Parser<'a> {
      * );
      * ```
      *
-     * This parser must be informed of how to represent symbols when they are
-     * parsed. The `Sym` type parameter must implement `FromStr` and `ToString`
-     * reflexively (i.e. the output of `ToString::to_string` for a given value
-     * **must** produce the same value when used with `FromStr::from_str` and
-     * visa versa such that the value can be encoded and decoded the same way).
-     * If no special treatment of symbols is required, `parse_basic` should be
-     * used.
-     *
-     * This will produce parsing errors when `FromStr::from_str` fails.
+     * Similar to `read`, the parser must be informed of the type to be used
+     * for expressing symbols.
      */
-    pub fn parse<Sym: FromStr>(self) -> ParseResult<Value<Sym>> {
-        let mut chars = self.source.chars().enumerate().peekable();
-        
-        // Remove leading whitespace
-        consume_comments(&mut chars);
+    pub fn parse<Sym: FromStr>(mut self) -> ParseResult<Value<Sym>> {
 
-        let result = try!(self.parse_expression(&mut chars));
+        // Remove leading whitespace
+        self.consume_comments();
+
+        let result = try!(self.parse_expression());
 
         // Remove trailing whitespace
-        consume_comments(&mut chars);
+        self.consume_comments();
 
-        if let Some((pos, _)) = chars.next() {
-            ParseError::err("Trailing garbage text", self.source, pos)
+        if let Some(_) = self.next() {
+            parse_err!("Trailing garbage text", self)
         } else {
             Ok(result)
         }
@@ -156,49 +243,96 @@ impl<'a> Parser<'a> {
     }
 
     /**
+     * Peek at the next value in the buffer
+     */
+    pub fn peek(&mut self) -> Option<&char> {
+        if self.buffer.len() <= 0 {
+            self.extend_buffer();
+        } 
+
+        self.buffer.get(0)
+    }
+
+    /**
+     * Get the next value
+     */
+    pub fn next(&mut self) -> Option<char> {
+        if self.buffer.len() <= 0 {
+            self.extend_buffer();
+        } 
+
+        let next_c = self.buffer.pop_front();
+
+        // Advance position if possible
+        if let Some(c) = next_c {
+            if c == '\n' {
+                self.line +=  1;
+                self.col   = -1;
+            } else {
+                self.col  +=  1;
+            }
+            Some(c)
+        } else {
+            None
+        }
+    }
+
+    /**
+     * Get the next line and add to queue
+     */
+    pub fn extend_buffer(&mut self) {
+        let mut line = String::new();
+        if let Ok(_) = self.reader.read_line(&mut line) {
+            for t in line.chars() {
+                self.buffer.push_back(t);
+            }
+        }
+    }
+
+    /**
      * Parse a single sexpression
      */
-    fn parse_expression<Sym: FromStr>(&self, chars: &mut CharSource) 
+    fn parse_expression<Sym: FromStr>(&mut self) 
         -> ParseResult<Value<Sym>> {
         
         // Consume leading comments
-        consume_comments(chars);
+        self.consume_comments();
 
-        self.parse_immediate(chars)
+        self.parse_immediate()
     }
 
     /**
      * Parse the next immediate expression
      */
-    fn parse_immediate<Sym: FromStr>(&self, chars: &mut CharSource) -> ParseResult<Value<Sym>> {
-        if let Some(&(pos, c)) = chars.peek() {
+    fn parse_immediate<Sym: FromStr>(&mut self) -> ParseResult<Value<Sym>> {
+        if let Some(&c) = self.peek() {
             match c {
                 // String literal
-                '"' => self.parse_quoted(chars),
+                '"' => self.parse_quoted(),
                 // Start of cons 
                 '(' => {
-                    chars.next();
-                    self.parse_cons(chars)
+                    self.next();
+                    self.parse_cons()
                 },
                 // End of Cons
-                ')' => ParseError::err("Unexpected close brace", self.source, pos),
+                ')' => parse_err!("Unexpected close brace", self),
                 // Extension
-                '#' => ParseError::err("Extensions are not yet implemented", self.source, pos),
+                '#' => parse_err!("Extensions are not yet implemented", self),
                 // Quoting
                 '\'' => {
-                    chars.next();
-                    Ok(Value::data(try!(self.parse_immediate(chars))))
+                    self.next();
+                    Ok(Value::data(try!(self.parse_immediate())))
                 },
                 '`' => {
-                    chars.next();
-                    Ok(Value::data(try!(self.parse_immediate(chars))))
+                    self.next();
+                    Ok(Value::data(try!(self.parse_immediate())))
                 },
                 ',' => {
-                    chars.next();
-                    Ok(Value::code(try!(self.parse_immediate(chars))))
+                    self.next();
+                    Ok(Value::code(try!(self.parse_immediate())))
                 },
                 // Automatic value
-                _   => self.parse_value(chars),
+                _   => self.parse_value(),
             }
         } else {
             end_of_file!(self)
@@ -208,23 +342,22 @@ impl<'a> Parser<'a> {
     /**
      * Parse a Cons
      */
-    fn parse_cons<Sym: FromStr>(&self, chars: &mut CharSource)
-        -> ParseResult<Value<Sym>> {
-        let left = try!(cons_side!(self, chars, {self.parse_expression(chars)}, ')' => {
-            chars.next();
+    fn parse_cons<Sym: FromStr>(&mut self) -> ParseResult<Value<Sym>> {
+        let left = try!(cons_side!(self, {self.parse_expression()}, ')' => {
+            self.next();
             Ok(Value::Nil)
         }));
 
         if left.is_nil() {
             Ok(left)
         } else {
-            let right = try!(cons_side!(self, chars, {self.parse_cons(chars)},
+            let right = try!(cons_side!(self, {self.parse_cons()},
                 ')' => {
-                    chars.next();
+                    self.next();
                     Ok(Value::Nil)
                 },
                 '.' => {
-                    self.parse_cons_rest(chars)
+                    self.parse_cons_rest()
                 }
             ));
 
@@ -232,20 +365,18 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_cons_rest<Sym: FromStr>(&self, chars: &mut CharSource)
-        -> ParseResult<Value<Sym>> {
-        let &(pos, _) = chars.peek().unwrap();
-        let next_val = try!(self.unescape_value(chars));
+    fn parse_cons_rest<Sym: FromStr>(&mut self) -> ParseResult<Value<Sym>> {
+        let next_val = try!(self.unescape_value());
 
         if next_val == "." {
             // Cons join
-            consume_comments(chars);
-            let value = cons_err!(self, chars, 
+            self.consume_comments();
+            let value = cons_err!(self, 
                 ')' => "Cons closed without right side"
             );
-            if let Some((pos, c)) = chars.next() {
+            if let Some(c) = self.next() {
                 if c != ')' {
-                    ParseError::err("Error finding close of cons", self.source, pos)
+                    parse_err!("Error finding close of cons", self)
                 } else {
                     value
                 }
@@ -255,8 +386,8 @@ impl<'a> Parser<'a> {
         } else {
             // List
             Ok(Value::cons(
-                try!(self.value_from_string(&next_val, pos)),
-                try!(self.parse_cons(chars))
+                try!(self.value_from_string(&next_val)),
+                try!(self.parse_cons())
             ))
         }
     }
@@ -264,24 +395,24 @@ impl<'a> Parser<'a> {
     /**
      * Extract a value up until the given delimiter. Does not consume delimiter.
      */
-    fn extract_delimited(&self, chars: &mut CharSource, delimiter: &Fn(char) -> bool, allow_eof: bool) 
+    fn extract_delimited(&mut self, delimiter: &Fn(char) -> bool, allow_eof: bool) 
         -> ParseResult<String> {
         let mut value = String::new();
 
         // Push each following character into the parsed string
-        while let Some(&(pos, preview)) = chars.peek() {
+        while let Some(&preview) = self.peek() {
             if preview == '\\' {
-                let (_, c) = chars.next().unwrap();
+                let c = self.next().unwrap();
                 value.push(c);
-                if let Some((_, follower)) = chars.next() {
+                if let Some(follower) = self.next() {
                     value.push(follower);
                 } else {
-                    return ParseError::err("Unexpected end of escape sequence", self.source, pos);
+                    return parse_err!("Unexpected end of escape sequence", self);
                 }
             } else if delimiter(preview) {
                 return Ok(value);
             } else {
-                let (_, c) = chars.next().unwrap();
+                let c = self.next().unwrap();
                 value.push(c);
             }
         }
@@ -297,54 +428,50 @@ impl<'a> Parser<'a> {
     /**
      * Parse a quoted value
      */
-    fn parse_quoted<Sym: FromStr>(&self, chars: &mut CharSource) 
-        -> ParseResult<Value<Sym>> {
+    fn parse_quoted<Sym: FromStr>(&mut self) -> ParseResult<Value<Sym>> {
         // remove leading quote
-        let (start_pos, _) = chars.next().unwrap();
+        self.next().unwrap();
 
         // parsed string value
-        let unquoted = try!(self.extract_delimited(chars, &(|c| c == '"'), false));
+        let unquoted = try!(self.extract_delimited(&(|c| c == '"'), false));
 
         // remove trailing quote
-        chars.next().unwrap();
+        self.next().unwrap();
 
-        Ok(Value::string(try!(self.parse_text(&unquoted, start_pos))))
+        Ok(Value::string(try!(self.parse_text(&unquoted))))
     }
 
     /**
      * Extract a single string escaped value
      */
-    fn unescape_value(&self, chars: &mut CharSource) -> ParseResult<String> {
-        let &(pos, _) = chars.peek().unwrap();
-        self.parse_text(&try!(self.extract_delimited(chars, &default_delimit, true)).escape_special(), pos)
+    fn unescape_value(&mut self) -> ParseResult<String> {
+        let text = try!(self.extract_delimited(&default_delimit, true)).escape_special();
+        self.parse_text(&text)
     }
 
     /**
      * Parse a an escaped text (symbol or string)
      */
-    fn parse_text(&self, s: &AsRef<str>, start_pos: usize) -> ParseResult<String> {
+    fn parse_text(&mut self, s: &AsRef<str>) -> ParseResult<String> {
         if let Some(parsed) = unescape(s.as_ref()) {
             Ok(parsed)
         } else {
-            ParseError::err("String literal escape error", self.source, start_pos)
+            parse_err!("String literal escape error", self)
         }
     }
 
     /**
      * Parse the next value into a type
      */
-    fn parse_value<Sym: FromStr>(&self, chars: &mut CharSource) 
-        -> ParseResult<Value<Sym>> {
-        let &(pos, _) = chars.peek().unwrap();
-        let text = try!(self.unescape_value(chars));
-        self.value_from_string(&text, pos)
+    fn parse_value<Sym: FromStr>(&mut self) -> ParseResult<Value<Sym>> {
+        let text = try!(self.unescape_value());
+        self.value_from_string(&text)
     }
 
     /**
      * Parse a string into a value
      */
-    fn value_from_string<Sym: FromStr>(&self, text: &str, pos: usize) 
-        -> ParseResult<Value<Sym>> {
+    fn value_from_string<Sym: FromStr>(&mut self, text: &str) -> ParseResult<Value<Sym>> {
         // Try make an integer
         match i64::from_str(&text) {
             Ok(i) => return Ok(Value::int(i)),
@@ -359,11 +486,49 @@ impl<'a> Parser<'a> {
 
         // Try make a symbol
         if text.len() == 0usize {
-            ParseError::err("Empty symbol error", self.source, pos)
+            parse_err!("Empty symbol error", self)
         } else if let Some(sym) = Value::symbol(&text) {
             Ok(sym)
         } else {
-            ParseError::err("Error resolving symbol", self.source, pos)
+            parse_err!("Error resolving symbol", self)
+        }
+    }
+
+    /**
+     * Consume whitespace
+     */
+    fn consume_whitespace(&mut self) {
+        while let Some(&c) = self.peek() {
+            if c.is_whitespace() {
+                self.next();
+            } else {
+                return;
+            }
+        }
+    }
+    
+    /**
+     * Consume the remaining line of text
+     */
+    fn consume_line(&mut self) {
+        while let Some(c) = self.next() {
+            if c == '\n' { return; }
+        }
+    }
+    
+    /**
+     * Consume blocks of comments
+     */
+    fn consume_comments(&mut self) {
+        self.consume_whitespace();
+        while let Some(&c) = self.peek() {
+            if c == ';' {
+                self.consume_line();
+            } else if c.is_whitespace() {
+                self.consume_whitespace();
+            } else {
+                return;
+            }
         }
     }
 }
@@ -394,44 +559,6 @@ impl EscapeSpecial for String {
  */
 fn default_delimit(c: char) -> bool { 
     c.is_whitespace() || c == ';' || c == '(' || c == ')' || c == '"' 
-}
-
-/**
- * Consume whitespace
- */
-fn consume_whitespace(chars: &mut CharSource) {
-    while let Some(&(_, c)) = chars.peek() {
-        if c.is_whitespace() {
-            chars.next();
-        } else {
-            return;
-        }
-    }
-}
-
-/**
- * Consume the remaining line of text
- */
-fn consume_line(chars: &mut CharSource) {
-    while let Some((_, c)) = chars.next() {
-        if c == '\n' { return; }
-    }
-}
-
-/**
- * Consume blocks of comments
- */
-fn consume_comments(chars: &mut CharSource) {
-    consume_whitespace(chars);
-    while let Some(&(_, c)) = chars.peek() {
-        if c == ';' {
-            consume_line(chars);
-        } else if c.is_whitespace() {
-            consume_whitespace(chars);
-        } else {
-            return;
-        }
-    }
 }
 
 #[test]
