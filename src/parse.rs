@@ -382,6 +382,10 @@ impl EscapeSpecial for String {
             .replace("\\(", "(")
             .replace("\\)", ")")
             .replace("\\\"", "\"")
+            .replace("\\\'", "\'")
+            .replace("\\`", "`")
+            .replace("\\,", ",")
+            .replace("\\\\", "\\")
     }
 }
 
@@ -639,4 +643,22 @@ fn quasiquoting() {
         parse_text("`(,(left `right . `last) ,middle end)").unwrap_full(), 
         s_tree!(StringValue: (([left] . ([right] . [last])) [middle] [end]))
     );
+}
+
+#[test]
+fn symmetric_encoding() {
+    fn check(text: &'static str) {
+        assert_eq!(
+            Parser::new(&text).parse::<String>().unwrap().to_string(),
+            text
+        );
+    }
+    check("one");
+    check("12");
+    check("3.152");
+    check("3.0");
+    check("-1.0");
+    check("(a b c d)");
+    check("(a b c . d)");
+    check("this\\;uses\\\"odd\\(chars\\)\\ space");
 }
