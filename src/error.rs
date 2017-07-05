@@ -15,8 +15,6 @@ pub struct ParseError {
     pub line:    usize,
     /// The column number at which the error occurred.
     pub column:  usize,
-    /// The index in the given `str` at which caused the error.
-    pub index:   usize,
 }
 
 impl ParseError {
@@ -25,13 +23,11 @@ impl ParseError {
      * there is no raw error constructor
      */
     #[cold]
-    fn new(message: &'static str, source: &str, pos: usize) -> Err {
-        let (line, column) = ParseError::get_location(source, pos);
+    fn new(message: &'static str, line: usize, col: usize) -> Err {
         Box::new(ParseError {
             message: message,
             line:    line,
-            column:  column,
-            index:   pos,
+            column:  col,
         })
     }
 
@@ -42,8 +38,8 @@ impl ParseError {
      * being parsed and `pos` is the index in the `str` where the parsing error
      * occurred.
      */
-    pub fn err<T>(message: &'static str, source: &str, pos: usize) -> ParseResult<T> {
-        Err(ParseError::new(message, source, pos))
+    pub fn err<T>(message: &'static str, line: usize, col: usize) -> ParseResult<T> {
+        Err(ParseError::new(message, line, col))
     }
 
     /**
@@ -52,6 +48,7 @@ impl ParseError {
      *
      * Tuple is in the form `(line, column)`.
      */
+    #[allow(dead_code)]
     fn get_location(s: &str, pos: usize) -> (usize, usize) {
         let mut line: usize = 1;
         let mut col:  isize = -1;
@@ -105,7 +102,6 @@ fn error_display() {
         message: "Unexpected eof",
         line:    1usize,
         column:  4usize,
-        index:   4usize
     };
 
     assert_eq!(format!("{:?}", error), "1:4: Unexpected eof");
