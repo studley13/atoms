@@ -551,7 +551,7 @@ impl<Sym> Display for Value<Sym> where Sym: ToString + FromStr {
         match *self {
             Value::Cons(ref left, ref right) => display_cons(left, right, true, f),
             Value::Str(ref text) => write!(f, "\"{}\"", escape_string(&text)),
-            Value::Symbol(ref sym) => write!(f, "{}", escape_string(&sym.to_string().replace(" ", "\\ "))),
+            Value::Symbol(ref sym) => write!(f, "{}", escape_symbol(&sym.to_string())),
             Value::Int(ref i) => write!(f, "{}", i),
             Value::Float(ref fl) => format_float(f, *fl),
             Value::Nil => write!(f, "()"),
@@ -604,6 +604,23 @@ fn escape_string(text: &AsRef<str>) -> String {
                 '\'' => "\\\'".to_string(),
                 '\"' => "\\\"".to_string(),
                 '\\' => "\\\\".to_string(),
+                _ => c.to_string(),
+            }
+        }
+    ).collect()
+}
+
+fn escape_symbol(text: &AsRef<str>) -> String {
+    escape_string(text).chars().map(
+        |c| -> String { 
+            match c {
+                ' '  => "\\ ".to_string(),
+                '('  => "\\(".to_string(),
+                ')'  => "\\)".to_string(),
+                '#'  => "\\#".to_string(),
+                ';'  => "\\;".to_string(),
+                '`'  => "\\`".to_string(),
+                ','  => "\\,".to_string(),
                 _ => c.to_string(),
             }
         }
