@@ -1,5 +1,7 @@
 //! Functions related to parsing of input
 
+#![deny(unused_must_use)]
+
 use value::{Value, StringValue};
 use error::{ParseError, ParseResult};
 use std::io::{Read, BufRead, BufReader};
@@ -11,14 +13,14 @@ use unescape::unescape;
 
 macro_rules! parse_err {
     ( $name:ident, $me:ident ) => {
-        Err(ParseError::$name($me.line, max($me.col, 0) as usize))
+        Err(ParseError::$name($me.line, $me.get_col()))
     }
 }
 
 macro_rules! cons_side {
     ( $me:ident, $default:block, $($catch:pat => $catch_result:block),*) => {{
-        $me.consume_comments();
-        if let Some(&c) = $me.peek() {
+        try!($me.consume_comments());
+        if let Some(&c) = try!($me.peek()) {
             match c {
                 $($catch => $catch_result),*
                 _ => $default,
@@ -31,8 +33,8 @@ macro_rules! cons_side {
 
 macro_rules! cons_err {
     ( $me:ident, $($err:pat => $err_name:ident),*) => {{
-        $me.consume_comments();
-        if let Some(&c) = $me.peek() {
+        try!($me.consume_comments());
+        if let Some(&c) = try!($me.peek()) {
             match c {
                 $($err => parse_err!($err_name, $me),),*
                 _ => $me.parse_expression(),
@@ -175,7 +177,7 @@ impl<R: Read> Parser<R> {
      */
     pub fn read<Sym: FromStr>(&mut self) -> ParseResult<Value<Sym>> {
         // Consume the comments
-        self.consume_comments();
+        try!(self.consume_comments());
         self.parse_expression()
     }
 
@@ -204,14 +206,14 @@ impl<R: Read> Parser<R> {
     pub fn parse<Sym: FromStr>(mut self) -> ParseResult<Value<Sym>> {
 
         // Remove leading whitespace
-        self.consume_comments();
+        try!(self.consume_comments());
 
         let result = try!(self.parse_expression());
 
         // Remove trailing whitespace
-        self.consume_comments();
+        try!(self.consume_comments());
 
-        if let Some(_) = self.next() {
+        if let Some(_) = try!(self.next()) {
             parse_err!(TrailingGarbage, self)
         } else {
             Ok(result)
@@ -239,26 +241,33 @@ impl<R: Read> Parser<R> {
      * will resolve all symbols as `String`s.
      */
     pub fn parse_basic(self) -> ParseResult<StringValue> {
-        self.parse::<String>()
+        self.parse()
+    }
+
+    /**
+     * Get the column
+     */
+    fn get_col(&self) -> usize {
+        max(self.col, 0) as usize
     }
 
     /**
      * Peek at the next value in the buffer
      */
-    pub fn peek(&mut self) -> Option<&char> {
+    fn peek(&mut self) -> ParseResult<Option<&char>> {
         if self.buffer.len() <= 0 {
-            self.extend_buffer();
+            try!(self.extend_buffer());
         } 
 
-        self.buffer.get(0)
+        Ok(self.buffer.get(0))
     }
 
     /**
      * Get the next value
      */
-    pub fn next(&mut self) -> Option<char> {
+    fn next(&mut self) -> ParseResult<Option<char>> {
         if self.buffer.len() <= 0 {
-            self.extend_buffer();
+            try!(self.extend_buffer());
         } 
 
         let next_c = self.buffer.pop_front();
@@ -271,21 +280,25 @@ impl<R: Read> Parser<R> {
             } else {
                 self.col  +=  1;
             }
-            Some(c)
+            Ok(Some(c))
         } else {
-            None
+            Ok(None)
         }
     }
 
     /**
      * Get the next line and add to queue
      */
-    pub fn extend_buffer(&mut self) {
+    fn extend_buffer(&mut self) -> ParseResult<()> {
         let mut line = String::new();
-        if let Ok(_) = self.reader.read_line(&mut line) {
-            for t in line.chars() {
-                self.buffer.push_back(t);
-            }
+        match self.reader.read_line(&mut line) {
+            Ok(_) => {
+                for t in line.chars() {
+                    self.buffer.push_back(t);
+                }
+                Ok(())
+            },
+            Err(e) => Err(ParseError::BufferError(self.line, self.get_col(), e))
         }
     }
 
@@ -296,7 +309,7 @@ impl<R: Read> Parser<R> {
         -> ParseResult<Value<Sym>> {
         
         // Consume leading comments
-        self.consume_comments();
+        try!(self.consume_comments());
 
         self.parse_immediate()
     }
@@ -305,13 +318,13 @@ impl<R: Read> Parser<R> {
      * Parse the next immediate expression
      */
     fn parse_immediate<Sym: FromStr>(&mut self) -> ParseResult<Value<Sym>> {
-        if let Some(&c) = self.peek() {
+        if let Some(&c) = try!(self.peek()) {
             match c {
                 // String literal
                 '"' => self.parse_quoted(),
                 // Start of cons 
                 '(' => {
-                    self.next();
+                    try!(self.next());
                     self.parse_cons()
                 },
                 // End of Cons
@@ -320,15 +333,15 @@ impl<R: Read> Parser<R> {
                 '#' => parse_err!(NoExtensions, self),
                 // Quoting
                 '\'' => {
-                    self.next();
+                    try!(self.next());
                     Ok(Value::data(try!(self.parse_immediate())))
                 },
                 '`' => {
-                    self.next();
+                    try!(self.next());
                     Ok(Value::data(try!(self.parse_immediate())))
                 },
                 ',' => {
-                    self.next();
+                    try!(self.next());
                     Ok(Value::code(try!(self.parse_immediate())))
                 },
                 // Automatic value
@@ -344,7 +357,7 @@ impl<R: Read> Parser<R> {
      */
     fn parse_cons<Sym: FromStr>(&mut self) -> ParseResult<Value<Sym>> {
         let left = try!(cons_side!(self, {self.parse_expression()}, ')' => {
-            self.next();
+            try!(self.next());
             Ok(Value::Nil)
         }));
 
@@ -353,7 +366,7 @@ impl<R: Read> Parser<R> {
         } else {
             let right = try!(cons_side!(self, {self.parse_cons()},
                 ')' => {
-                    self.next();
+                    try!(self.next());
                     Ok(Value::Nil)
                 },
                 '.' => {
@@ -370,11 +383,11 @@ impl<R: Read> Parser<R> {
 
         if next_val == "." {
             // Cons join
-            self.consume_comments();
+            try!(self.consume_comments());
             let value = cons_err!(self, 
                 ')' => JoinWithoutRight 
             );
-            if let Some(c) = self.next() {
+            if let Some(c) = try!(self.next()) {
                 if c != ')' {
                     parse_err!(ConsWithoutClose, self)
                 } else {
@@ -400,11 +413,11 @@ impl<R: Read> Parser<R> {
         let mut value = String::new();
 
         // Push each following character into the parsed string
-        while let Some(&preview) = self.peek() {
+        while let Some(&preview) = try!(self.peek()) {
             if preview == '\\' {
-                let c = self.next().unwrap();
+                let c = try!(self.next()).unwrap();
                 value.push(c);
-                if let Some(follower) = self.next() {
+                if let Some(follower) = try!(self.next()) {
                     value.push(follower);
                 } else {
                     return end_of_file!(self);
@@ -412,7 +425,7 @@ impl<R: Read> Parser<R> {
             } else if delimiter(preview) {
                 return Ok(value);
             } else {
-                let c = self.next().unwrap();
+                let c = try!(self.next()).unwrap();
                 value.push(c);
             }
         }
@@ -430,13 +443,13 @@ impl<R: Read> Parser<R> {
      */
     fn parse_quoted<Sym: FromStr>(&mut self) -> ParseResult<Value<Sym>> {
         // remove leading quote
-        self.next().unwrap();
+        try!(self.next()).unwrap();
 
         // parsed string value
         let unquoted = try!(self.extract_delimited(&(|c| c == '"'), false));
 
         // remove trailing quote
-        self.next().unwrap();
+        try!(self.next()).unwrap();
 
         Ok(Value::string(try!(self.parse_text(&unquoted))))
     }
@@ -497,39 +510,45 @@ impl<R: Read> Parser<R> {
     /**
      * Consume whitespace
      */
-    fn consume_whitespace(&mut self) {
-        while let Some(&c) = self.peek() {
+    fn consume_whitespace(&mut self) -> ParseResult<()> {
+        while let Some(&c) = try!(self.peek()) {
             if c.is_whitespace() {
-                self.next();
+                try!(self.next());
             } else {
-                return;
+                return Ok(());
             }
         }
+
+        Ok(())
     }
     
     /**
      * Consume the remaining line of text
      */
-    fn consume_line(&mut self) {
-        while let Some(c) = self.next() {
-            if c == '\n' { return; }
+    fn consume_line(&mut self) -> ParseResult<()> {
+        while let Some(c) = try!(self.next()) {
+            if c == '\n' { return Ok(()); }
         }
+
+        Ok(())
     }
     
     /**
      * Consume blocks of comments
      */
-    fn consume_comments(&mut self) {
-        self.consume_whitespace();
-        while let Some(&c) = self.peek() {
+    fn consume_comments(&mut self) -> ParseResult<()> {
+        try!(self.consume_whitespace());
+        while let Some(&c) = try!(self.peek()) {
             if c == ';' {
-                self.consume_line();
+                try!(self.consume_line());
             } else if c.is_whitespace() {
-                self.consume_whitespace();
+                try!(self.consume_whitespace());
             } else {
-                return;
+                return Ok(());
             }
         }
+
+        Ok(())
     }
 }
 

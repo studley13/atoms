@@ -3,7 +3,7 @@
 #![warn(missing_docs)]
 #![deny(unsafe_code)]
 
-use std::{error, fmt};
+use std::{error, fmt, io};
 
 /**
  * Error that occurs when parsing s-expression.
@@ -18,7 +18,8 @@ pub enum ParseError {
     ConsWithoutClose(usize, usize),
     StringLiteral(usize, usize),
     EmptySymbol(usize, usize),
-    SymbolResolution(usize, usize)
+    SymbolResolution(usize, usize),
+    BufferError(usize, usize, io::Error),
 }
 
 impl ParseError {
@@ -33,7 +34,8 @@ impl ParseError {
             ParseError::ConsWithoutClose(l, c) => (l, c),
             ParseError::StringLiteral(l, c) => (l, c),
             ParseError::EmptySymbol(l, c) => (l, c),
-            ParseError::SymbolResolution(l, c) => (l, c)
+            ParseError::SymbolResolution(l, c) => (l, c),
+            ParseError::BufferError(l, c, _) => (l, c),
         }
     }
 
@@ -70,10 +72,17 @@ impl error::Error for ParseError {
             ParseError::EmptySymbol(_, _) => 
                 "Empty symbol error",
             ParseError::SymbolResolution(_, _) => 
-                "Error resolving symbol"
+                "Error resolving symbol",
+            ParseError::BufferError(_, _, _) => 
+                "Error buffering text"
         }
     }
-    fn cause(&self) -> Option<&error::Error> { None }
+    fn cause(&self) -> Option<&error::Error> { 
+        match *self {
+            ParseError::BufferError(_, _, ref e) => Some(e),
+            _ => None
+        }
+    }
 }
 
 /**
