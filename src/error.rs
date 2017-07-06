@@ -1,13 +1,11 @@
 //! Errors produced during that parsing of S-expressions
 
-#![deny(missing_docs)]
+#![warn(missing_docs)]
 #![deny(unsafe_code)]
 
 use std::{error, fmt};
 
-/**
- * Error that occurs when parsing s-expression.
- */
+/*
 pub struct ParseError {
     /// The error that occurred
     pub message: &'static str,
@@ -42,18 +40,78 @@ impl ParseError {
         Err(ParseError::new(message, line, col))
     }
 }
+*/
 
-impl error::Error for ParseError {
-    fn description(&self) -> &str { self.message }
-    fn cause(&self) -> Option<&error::Error> { None }
+/**
+ * Error that occurs when parsing s-expression.
+ */
+pub enum ParseError {
+    ConsParse(usize, usize),
+    EndOfFile(usize, usize),
+    TrailingGarbage(usize, usize),
+    ClosingBrace(usize, usize),
+    NoExtensions(usize, usize),
+    JoinWithoutRight(usize, usize),
+    ConsWithoutClose(usize, usize),
+    StringLiteral(usize, usize),
+    EmptySymbol(usize, usize),
+    SymbolResolution(usize, usize)
 }
 
-/// Since errors are the uncommon case, they're boxed. This keeps the size of
-/// structs down, which helps performance in the common case.
-///
-/// For example, an `ERes<()>` becomes 8 bytes, instead of the 24 bytes it would
-/// be if `Err` were unboxed.
-type Err = Box<ParseError>;
+impl ParseError {
+    pub fn position(&self) -> (usize, usize) {
+        match *self {
+            ParseError::ConsParse(l, c) => (l, c),
+            ParseError::EndOfFile(l, c) => (l, c),
+            ParseError::TrailingGarbage(l, c) => (l, c),
+            ParseError::ClosingBrace(l, c) => (l, c),
+            ParseError::NoExtensions(l, c) => (l, c),
+            ParseError::JoinWithoutRight(l, c) => (l, c),
+            ParseError::ConsWithoutClose(l, c) => (l, c),
+            ParseError::StringLiteral(l, c) => (l, c),
+            ParseError::EmptySymbol(l, c) => (l, c),
+            ParseError::SymbolResolution(l, c) => (l, c)
+        }
+    }
+
+    pub fn line(&self) -> usize {
+        let (line, _) = self.position();
+        line
+    }
+
+    pub fn column(&self) -> usize {
+        let (_, column) = self.position();
+        column
+    }
+}
+
+impl error::Error for ParseError {
+    fn description(&self) -> &str { 
+        match *self {
+            ParseError::ConsParse(_, _) => 
+                "Error parsing cons or list",
+            ParseError::EndOfFile(_, _) => 
+                "Unexpected end of file",
+            ParseError::TrailingGarbage(_, _) => 
+                "Trailing garbage text",
+            ParseError::ClosingBrace(_, _) => 
+                "Unexpected closing brace",
+            ParseError::NoExtensions(_, _) => 
+                "Extensions have not yet been implemented",
+            ParseError::JoinWithoutRight(_, _) => 
+                "Cons pair closed without right side",
+            ParseError::ConsWithoutClose(_, _) => 
+                "Error finding close of cons",
+            ParseError::StringLiteral(_, _) => 
+                "String literal escape error",
+            ParseError::EmptySymbol(_, _) => 
+                "Empty symbol error",
+            ParseError::SymbolResolution(_, _) => 
+                "Error resolving symbol"
+        }
+    }
+    fn cause(&self) -> Option<&error::Error> { None }
+}
 
 /**
  * The result of parsing an s-expression.
@@ -61,11 +119,12 @@ type Err = Box<ParseError>;
  * If something goes wrong, the error should be a `ParseError`, otherwise it's
  * a successful parsing of the s-expression fragment.
  */
-pub type ParseResult<T> = Result<T, Err>;
+pub type ParseResult<T> = Result<T, ParseError>;
 
 impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "{}:{}: {}", self.line, self.column, self.message)
+        use std::error::Error;
+        write!(f, "{}:{}: {}", self.line(), self.column(), self.description())
     }
 }
 
@@ -77,12 +136,8 @@ impl fmt::Debug for ParseError {
 
 #[test]
 fn error_display() {
-    let error = ParseError {
-        message: "Unexpected eof",
-        line:    1usize,
-        column:  4usize,
-    };
+    let error = ParseError::EndOfFile(1usize, 4usize);
 
-    assert_eq!(format!("{:?}", error), "1:4: Unexpected eof");
-    assert_eq!(format!("{:?}", Box::new(error)), "1:4: Unexpected eof");
+    assert_eq!(format!("{:?}", error), "1:4: Unexpected end of file");
+    assert_eq!(format!("{:?}", Box::new(error)), "1:4: Unexpected end of file");
 }

@@ -10,8 +10,8 @@ use std::collections::VecDeque;
 use unescape::unescape;
 
 macro_rules! parse_err {
-    ( $msg:expr, $me:ident ) => {
-        ParseError::err($msg, $me.line, max($me.col, 0) as usize)
+    ( $name:ident, $me:ident ) => {
+        Err(ParseError::$name($me.line, max($me.col, 0) as usize))
     }
 }
 
@@ -24,27 +24,27 @@ macro_rules! cons_side {
                 _ => $default,
             }
         } else {
-            parse_err!("Error parsing cons or list", $me)
+            parse_err!(ConsParse, $me)
         }
     }}
 }
 
 macro_rules! cons_err {
-    ( $me:ident, $($err:pat => $err_text:expr),*) => {{
+    ( $me:ident, $($err:pat => $err_name:ident),*) => {{
         $me.consume_comments();
         if let Some(&c) = $me.peek() {
             match c {
-                $($err => parse_err!($err_text, $me),),*
+                $($err => parse_err!($err_name, $me),),*
                 _ => $me.parse_expression(),
             }
         } else {
-            parse_err!("Error parsing cons or list", $me)
+            parse_err!(ConsParse, $me)
         }
     }}
 }
 
 macro_rules! end_of_file {
-    ( $me:ident ) => {parse_err!("Unexpected end of file", $me)}
+    ( $me:ident ) => {parse_err!(EndOfFile, $me)}
 }
 
 /**
@@ -212,7 +212,7 @@ impl<R: Read> Parser<R> {
         self.consume_comments();
 
         if let Some(_) = self.next() {
-            parse_err!("Trailing garbage text", self)
+            parse_err!(TrailingGarbage, self)
         } else {
             Ok(result)
         }
@@ -315,9 +315,9 @@ impl<R: Read> Parser<R> {
                     self.parse_cons()
                 },
                 // End of Cons
-                ')' => parse_err!("Unexpected close brace", self),
+                ')' => parse_err!(ClosingBrace, self),
                 // Extension
-                '#' => parse_err!("Extensions are not yet implemented", self),
+                '#' => parse_err!(NoExtensions, self),
                 // Quoting
                 '\'' => {
                     self.next();
@@ -372,11 +372,11 @@ impl<R: Read> Parser<R> {
             // Cons join
             self.consume_comments();
             let value = cons_err!(self, 
-                ')' => "Cons closed without right side"
+                ')' => JoinWithoutRight 
             );
             if let Some(c) = self.next() {
                 if c != ')' {
-                    parse_err!("Error finding close of cons", self)
+                    parse_err!(ConsWithoutClose, self)
                 } else {
                     value
                 }
@@ -407,7 +407,7 @@ impl<R: Read> Parser<R> {
                 if let Some(follower) = self.next() {
                     value.push(follower);
                 } else {
-                    return parse_err!("Unexpected end of escape sequence", self);
+                    return end_of_file!(self);
                 }
             } else if delimiter(preview) {
                 return Ok(value);
@@ -456,7 +456,7 @@ impl<R: Read> Parser<R> {
         if let Some(parsed) = unescape(s.as_ref()) {
             Ok(parsed)
         } else {
-            parse_err!("String literal escape error", self)
+            parse_err!(StringLiteral, self)
         }
     }
 
@@ -486,11 +486,11 @@ impl<R: Read> Parser<R> {
 
         // Try make a symbol
         if text.len() == 0usize {
-            parse_err!("Empty symbol error", self)
+            parse_err!(EmptySymbol, self)
         } else if let Some(sym) = Value::symbol(&text) {
             Ok(sym)
         } else {
-            parse_err!("Error resolving symbol", self)
+            parse_err!(SymbolResolution, self)
         }
     }
 
