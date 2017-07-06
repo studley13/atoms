@@ -328,9 +328,15 @@ impl<R: Read> Parser<R> {
                     self.parse_cons()
                 },
                 // End of Cons
-                ')' => parse_err!(ClosingParen, self),
+                ')' => {
+                    try!(self.next());
+                    parse_err!(ClosingParen, self)
+                },
                 // Extension
-                '#' => parse_err!(NoExtensions, self),
+                '#' => {
+                    try!(self.next());
+                    parse_err!(NoExtensions, self)
+                },
                 // Quoting
                 '\'' => {
                     try!(self.next());
@@ -356,26 +362,28 @@ impl<R: Read> Parser<R> {
      * Parse a Cons
      */
     fn parse_cons<Sym: FromStr>(&mut self) -> ParseResult<Value<Sym>> {
-        let left = try!(cons_side!(self, {self.parse_expression()}, ')' => {
-            try!(self.next());
-            Ok(Value::Nil)
-        }));
+        let left = try!(cons_side!(self, {self.parse_immediate()}, 
+            ')' => {
+                try!(self.next());
+                return Ok(Value::Nil)
+            }
+        ));
 
-        if left.is_nil() {
-            Ok(left)
-        } else {
-            let right = try!(cons_side!(self, {self.parse_cons()},
-                ')' => {
-                    try!(self.next());
-                    Ok(Value::Nil)
-                },
-                '.' => {
-                    self.parse_cons_rest()
-                }
-            ));
+        // Get right half of cons
+        let right = try!(cons_side!(self, {self.parse_cons()},
+            // Nil if immediate close
+            ')' => {
+                try!(self.next());
+                Ok(Value::Nil)
+            },
 
-            Ok(Value::cons(left, right))
-        }
+            // Might be cons pair if starting with .
+            '.' => {
+                self.parse_cons_rest()
+            }
+        ));
+
+        Ok(Value::cons(left, right))
     }
 
     fn parse_cons_rest<Sym: FromStr>(&mut self) -> ParseResult<Value<Sym>> {
@@ -387,6 +395,7 @@ impl<R: Read> Parser<R> {
             let value = cons_err!(self, 
                 ')' => ConsWithoutRight 
             );
+            try!(self.consume_comments());
             if let Some(c) = try!(self.next()) {
                 if c != ')' {
                     parse_err!(ConsWithoutClose, self)
@@ -744,6 +753,14 @@ fn github_issues() {
         parser.parse::<String>()
     }
     assert!(parse_text("(a #;(c d) e)").is_err());
+    assert_eq!(
+        parse_text("(a . ()  \n \t)").unwrap(), 
+        s_tree!(StringValue: ([a]))
+    );
+    assert_eq!(
+        parse_text("(((())))").unwrap(), 
+        s_tree!(StringValue: (((()))))
+    );
 }
 
 #[test]
