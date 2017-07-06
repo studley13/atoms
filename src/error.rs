@@ -5,43 +5,6 @@
 
 use std::{error, fmt};
 
-/*
-pub struct ParseError {
-    /// The error that occurred
-    pub message: &'static str,
-    /// The line number at which the error occurred.
-    pub line:    usize,
-    /// The column number at which the error occurred.
-    pub column:  usize,
-}
-
-impl ParseError {
-    /**
-     * Produce a new boxed error. Errors are always used in a boxed form so
-     * there is no raw error constructor
-     */
-    #[cold]
-    fn new(message: &'static str, line: usize, col: usize) -> Err {
-        Box::new(ParseError {
-            message: message,
-            line:    line,
-            column:  col,
-        })
-    }
-
-    /**
-     * Create an `Err` containing a given error.
-     *
-     * The `message` describes what went wrong, `source` is the `str` that was
-     * being parsed and `pos` is the index in the `str` where the parsing error
-     * occurred.
-     */
-    pub fn err<T>(message: &'static str, line: usize, col: usize) -> ParseResult<T> {
-        Err(ParseError::new(message, line, col))
-    }
-}
-*/
-
 /**
  * Error that occurs when parsing s-expression.
  */
