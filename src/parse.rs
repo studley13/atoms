@@ -328,7 +328,10 @@ impl<R: Read> Parser<R> {
                     self.parse_cons()
                 },
                 // End of Cons
-                ')' => parse_err!(ClosingParen, self),
+                ')' => {
+                    try!(self.next());
+                    parse_err!(ClosingParen, self)
+                },
                 // Extension
                 '#' => parse_err!(NoExtensions, self),
                 // Quoting
