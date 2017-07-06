@@ -26,7 +26,7 @@ macro_rules! cons_side {
                 _ => $default,
             }
         } else {
-            parse_err!(ConsParse, $me)
+            end_of_file!($me)
         }
     }}
 }
@@ -40,7 +40,7 @@ macro_rules! cons_err {
                 _ => $me.parse_expression(),
             }
         } else {
-            parse_err!(ConsParse, $me)
+            end_of_file!($me)
         }
     }}
 }
@@ -328,7 +328,7 @@ impl<R: Read> Parser<R> {
                     self.parse_cons()
                 },
                 // End of Cons
-                ')' => parse_err!(ClosingBrace, self),
+                ')' => parse_err!(ClosingParen, self),
                 // Extension
                 '#' => parse_err!(NoExtensions, self),
                 // Quoting
@@ -385,7 +385,7 @@ impl<R: Read> Parser<R> {
             // Cons join
             try!(self.consume_comments());
             let value = cons_err!(self, 
-                ')' => JoinWithoutRight 
+                ')' => ConsWithoutRight 
             );
             if let Some(c) = try!(self.next()) {
                 if c != ')' {
@@ -503,7 +503,7 @@ impl<R: Read> Parser<R> {
         } else if let Some(sym) = Value::symbol(&text) {
             Ok(sym)
         } else {
-            parse_err!(SymbolResolution, self)
+            parse_err!(SymbolEncode, self)
         }
     }
 
