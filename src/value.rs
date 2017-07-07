@@ -86,27 +86,6 @@ pub enum Value<Sym> {
 }
 
 impl<Sym: FromStr> Value<Sym> {
-
-    /**
-     * Automatically convert value
-     *
-     * This automatically creates the most sensible value for the types:
-     *
-     * * `i64`
-     * * `f64`
-     * * `String`
-     *
-     * ```rust
-     * use atoms::StringValue;
-     * assert_eq!(StringValue::auto(13), StringValue::int(13));
-     * assert_eq!(StringValue::auto(3.1415), StringValue::float(3.1415));
-     * assert_eq!(StringValue::auto("Text"), StringValue::string("Text"));
-     * ```
-     */
-    pub fn auto<T>(value: T) -> Value<Sym> where T: AutoValue<Sym> {
-        value.auto()
-    }
-
     /** 
      * Create a new symbol from a string.
      *
@@ -126,6 +105,28 @@ impl<Sym: FromStr> Value<Sym> {
             Ok(sym) => Some(Value::Symbol(sym)),
             Err(_) => None,
         }
+    }
+}
+
+impl<Sym> Value<Sym> {
+    /**
+     * Automatically convert value
+     *
+     * This automatically creates the most sensible value for the types:
+     *
+     * * `i64`
+     * * `f64`
+     * * `String`
+     *
+     * ```rust
+     * use atoms::StringValue;
+     * assert_eq!(StringValue::auto(13), StringValue::int(13));
+     * assert_eq!(StringValue::auto(3.1415), StringValue::float(3.1415));
+     * assert_eq!(StringValue::auto("Text"), StringValue::string("Text"));
+     * ```
+     */
+    pub fn auto<T>(value: T) -> Value<Sym> where T: AutoValue<Sym> {
+        value.auto()
     }
 
     /**
@@ -546,7 +547,7 @@ impl<Sym> AsRef<Value<Sym>> for Value<Sym> {
     }
 }
 
-impl<Sym> Display for Value<Sym> where Sym: ToString + FromStr {
+impl<Sym> Display for Value<Sym> where Sym: ToString {
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
         match *self {
             Value::Cons(ref left, ref right) => display_cons(left, right, true, f),
@@ -567,14 +568,14 @@ impl<Sym> Display for Value<Sym> where Sym: ToString + FromStr {
     }
 }
 
-impl<Sym> Debug for Value<Sym> where Sym: ToString + FromStr {
+impl<Sym> Debug for Value<Sym> where Sym: ToString {
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
         write!(f, "{}", self)
     }
 }
 
 fn display_cons<Sym>(left: &Value<Sym>, right: &Value<Sym>, root: bool, f: &mut Formatter) 
-    -> Result<(), fmt::Error> where Sym: ToString + FromStr {
+    -> Result<(), fmt::Error> where Sym: ToString {
 
     if root {
         try!(write!(f, "("));
@@ -641,13 +642,13 @@ fn format_float<F: Into<f64>>(f: &mut Formatter, fl: F) -> Result<(), fmt::Error
  * ensures that quasiqutoing is rendered properly
  */
 #[derive(PartialEq, PartialOrd)]
-struct MultiMode<'a, Sym: 'a + ToString + FromStr> {
+struct MultiMode<'a, Sym: 'a> {
     value: &'a Value<Sym>,
     is_data: bool,
     declare_mode: bool,
 }
 
-impl<'a, Sym: 'a + FromStr + ToString> MultiMode<'a, Sym> {
+impl<'a, Sym: 'a> MultiMode<'a, Sym> {
     /**
      * Create a new nultimode-tagged value. We assume that this is
      * only used to the root of a data expression that contains code
@@ -682,7 +683,7 @@ impl<'a, Sym: 'a + FromStr + ToString> MultiMode<'a, Sym> {
     }
 }
 
-impl<'a, Sym: 'a + ToString + FromStr> Display for MultiMode<'a, Sym> {
+impl<'a, Sym: 'a + ToString> Display for MultiMode<'a, Sym> {
 
     /*
      * This is implemented such that once we are displaying something tagged as 
@@ -721,14 +722,14 @@ impl<'a, Sym: 'a + ToString + FromStr> Display for MultiMode<'a, Sym> {
     }
 }
 
-impl<'a, Sym: 'a + ToString + FromStr> Debug for MultiMode<'a, Sym> {
+impl<'a, Sym: 'a + ToString> Debug for MultiMode<'a, Sym> {
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
         write!(f, "{}", self)
     }
 }
 
 fn display_cons_multimode<Sym>(left: MultiMode<Sym>, right: MultiMode<Sym>, root: bool, f: &mut Formatter) 
-    -> Result<(), fmt::Error> where Sym: ToString + FromStr {
+    -> Result<(), fmt::Error> where Sym: ToString {
 
     if root {
         try!(write!(f, "("));
@@ -753,7 +754,7 @@ fn display_cons_multimode<Sym>(left: MultiMode<Sym>, right: MultiMode<Sym>, root
     }
 }
 
-impl<'a, Sym: FromStr + ToString + Sized> Deref for MultiMode<'a, Sym> {
+impl<'a, Sym: Sized> Deref for MultiMode<'a, Sym> {
     type Target = Value<Sym>;
 
     fn deref(&self) -> &Value<Sym> {
@@ -766,31 +767,31 @@ pub trait AutoValue<Sym> {
     fn auto(self) -> Value<Sym>;
 }
 
-impl<Sym: FromStr> AutoValue<Sym> for Value<Sym> {
+impl<Sym> AutoValue<Sym> for Value<Sym> {
     fn auto(self) -> Value<Sym> {
        self 
     }
 }
 
-impl<Sym: FromStr> AutoValue<Sym> for i64 {
+impl<Sym> AutoValue<Sym> for i64 {
     fn auto(self) -> Value<Sym> {
         Value::int(self)
     }
 }
 
-impl<Sym: FromStr> AutoValue<Sym> for f64 {
+impl<Sym> AutoValue<Sym> for f64 {
     fn auto(self) -> Value<Sym> {
         Value::float(self)
     }
 }
 
-impl<'a, Sym: FromStr> AutoValue<Sym> for &'a str {
+impl<'a, Sym> AutoValue<Sym> for &'a str {
     fn auto(self) -> Value<Sym> {
         Value::string(self)
     }
 }
 
-impl<Sym: FromStr> AutoValue<Sym> for String {
+impl<Sym> AutoValue<Sym> for String {
     fn auto(self) -> Value<Sym> {
         Value::string(self)
     }
