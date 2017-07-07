@@ -68,7 +68,9 @@ extern crate unescape;
 mod value;
 mod parse;
 mod error;
+mod pretty;
 
 pub use value::{Value, StringValue};
 pub use parse::Parser;
 pub use error::{ParseResult, ParseError};
+pub use pretty::{Pretty, Layout};
