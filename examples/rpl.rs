@@ -2,7 +2,7 @@
  * Simple example of a Read-Print loop (we don't hav eval yet).
  */
 
-const VERSION: &'static str = "0.1.0";
+const VERSION: &'static str = "0.1.1";
 
 extern crate atoms;
 
