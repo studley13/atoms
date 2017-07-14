@@ -547,6 +547,9 @@ impl<Sym> AsRef<Value<Sym>> for Value<Sym> {
     }
 }
 
+/*
+ * TODO: Move all rendering logic over to the pretty printer
+ */
 impl<Sym> Display for Value<Sym> where Sym: ToString {
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
         match *self {
