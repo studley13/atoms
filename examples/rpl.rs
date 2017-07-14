@@ -6,7 +6,7 @@ const VERSION: &'static str = "0.1.0";
 
 extern crate atoms;
 
-use atoms::{Parser, StringValue};
+use atoms::{Parser, StringValue, Pretty};
 use std::io::{stdin, stdout, Write};
 
 fn main() {
@@ -26,7 +26,7 @@ fn main() {
                 if v == exit {
                     return;
                 } else {
-                    println!("{}", v)
+                    println!("{}", v.pretty().with_spaces(2))
                 },
         }
     }
