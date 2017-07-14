@@ -1,7 +1,3 @@
-//! A lightweight, self-contained s-expression parser and data format.
-//! Use `parse` to get an s-expression from its string representation, and the
-//! `Display` trait to serialize it, potentially by doing `sexp.to_string()`.
-//!
 //! **Atoms** is a basic S-expression parser. It parses strings and produces
 //! a tree of Cons-cells and atomic values of discrete type. Currently, only
 //! the following primitive types are available, and are represented with the
@@ -58,6 +54,29 @@
 //! assert_eq!(value.to_string(), "(this \"is\" 4 . s-expression)");
 //! ```
 //!
+//! ## Pretty Printing
+//!
+//! In order to pretty print a value, the type used for 
+//! [`Symbol`](enum.Value.html#variant.Symbol) must implement the trait 
+//! [`Layout`](pretty/trait.Layout.html). After that, it's as simple has having 
+//! the [`Pretty`](pretty/trait.Pretty.html) layout in scope and calling the 
+//! [`pretty`](pretty/trait.Pretty.html#method.pretty) method on the value when 
+//! converting to string or displaying.
+//!
+//! ```rust
+//! use atoms::{StringValue, Pretty};
+//! let value = StringValue::cons(
+//!     StringValue::symbol("this").unwrap(),
+//!     StringValue::cons(
+//!         StringValue::string("is"),
+//!         StringValue::cons(
+//!             StringValue::int(4),
+//!             StringValue::symbol("s-expression").unwrap(),
+//!         )
+//!     )
+//! );
+//! assert_eq!(value.pretty().to_string(), "(this \"is\" 4 . s-expression)");
+//!
 
 #![deny(missing_docs)]
 #![deny(unsafe_code)]
@@ -68,7 +87,7 @@ extern crate unescape;
 mod value;
 mod parse;
 mod error;
-mod pretty;
+pub mod pretty;
 
 pub use value::{Value, StringValue};
 pub use parse::Parser;
