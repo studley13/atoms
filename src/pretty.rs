@@ -136,7 +136,7 @@ use value::Value;
  * Classify values for printing
  */
 trait Classify {
-    /// THe depth of a value
+    /// The depth of a value
     fn depth(&self) -> u64;
 }
 
@@ -207,10 +207,13 @@ pub trait Pretty<'a> {
 impl<'a, Sym> Pretty<'a> for Value<Sym> where Sym: Sized {
     type Sym = Sym;
 
+    // Create a root pretty element to render
     fn pretty(&self) -> PrettyValue<Sym> {
         PrettyValue{
             value: self,
+            // Code by default
             data: false,
+            // Indentation to use tabs by default
             stop: Indentation::Tab,
             // If the root element is across multiple linesm it should indent
             level: 1u64,
@@ -224,13 +227,14 @@ impl<'a, Sym> Pretty<'a> for Value<Sym> where Sym: Sized {
  */
 impl Layout for String {}
 
-// Indentation mode
+// Indentation modes
 #[derive(Clone, Copy)]
 enum Indentation {
     Tab,
     Spaces(u64),
 }
 
+// Render the indentation as a string
 impl ToString for Indentation {
     fn to_string(&self) -> String {
         match *self {
@@ -265,6 +269,13 @@ pub struct PrettyValue<'a, Sym: 'a> {
 
     /// Print on single line (ugly)
     single_line: bool,
+}
+
+impl<'a, Sym> Deref for PrettyValue<'a, Sym> where Sym: Sized {
+    type Target = Value<Sym>;
+    fn deref(&self) -> &Value<Sym> {
+        self.value
+    }
 }
 
 impl<'a, 'b, S> PrettyValue<'a, S> {
@@ -315,6 +326,7 @@ impl<'a, 'b, S> PrettyValue<'a, S> {
         if self.single_line {
             " ".to_string()
         } else if self.value.depth() > 1 {
+            // Create a calye separator with number of indents required
             let mut sep = String::new();
             sep.push('\n');
             for _ in 0..self.level {
@@ -328,9 +340,7 @@ impl<'a, 'b, S> PrettyValue<'a, S> {
 }
 
 impl<'a, Sym: Layout> PrettyValue<'a, Sym> {
-    /// Get the next separator 
-    ///
-    /// Should only eve be called on a cons
+    /// Get the number of arguments that should fall on the first line
     fn first_line_args(&self) -> u64 {
         match *self.value {
             Value::Cons(ref left, _) =>
@@ -343,6 +353,7 @@ impl<'a, Sym: Layout> PrettyValue<'a, Sym> {
         }
     }
 
+    /// Number of arguments that should follow a given value
     fn first_line_args_value(v: &Value<Sym>) -> u64 {
         match *v {
             Value::Code(ref code) =>
@@ -363,6 +374,7 @@ impl<'a, Sym: Layout> PrettyValue<'a, Sym> {
 }
 
 impl<'a, Sym: ToString + Layout> PrettyValue<'a, Sym> {
+    /// Display a `Cons` with pretty indentation and separation
     fn pretty_cons(&self, f: &mut Formatter, left: &Value<Sym>, right: &Value<Sym>) 
         -> Result<(), fmt::Error> {
         // Open Braces and display left
@@ -398,12 +410,6 @@ impl<'a, Sym: ToString + Layout> PrettyValue<'a, Sym> {
     }
 }
 
-impl<'a, Sym> Deref for PrettyValue<'a, Sym> where Sym: Sized {
-    type Target = Value<Sym>;
-    fn deref(&self) -> &Value<Sym> {
-        self.value
-    }
-}
 
 impl<'a, Sym> Display for PrettyValue<'a, Sym> where Sym: Layout + ToString {
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
