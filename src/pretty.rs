@@ -3,88 +3,114 @@
 //! The pretty printing rules here are made to be as simple to *implement*
 //! as possible.
 //!
+//! Printing a value prettily is as simple as calling
+//! [`pretty`](trait.Pretty.html#method.pretty) on a
+//! [`Value`](../enum.Value.html) with the [`Pretty`](trait.Pretty.html) in
+//! scope.  The value used to represent a [`Symbol`][Symbol] must implement the
+//! [`Layout`](trait.Layout.html) trait for this to work, however.
+//!
 //! # Defining Values
+//!
+//! A *list* is a [`Cons`][Cons] *tree* wherein the *right* value of each
+//! [`Cons`][Cons] is either another [`Cons`][Cons] or a [`Nil`][Nil].
+//! Similarly, a *cons list* is the set of conses linked by their *right* value.
 //!
 //! ## Code versus Data
 //!
-//! For a `Symbol` to be considered **code**, it must be explicitly marked as 
-//! **code** when it is in a **data** block. If a `Symbol` is not inside a 
-//! **data** block, it is considered **code**.
+//! For a [`Symbol`][Symbol] to be considered **code**, it must be explicitly
+//! marked as **code** when it is in a **data** block. If a [`Symbol`][Symbol]
+//! is not inside a **data** block, it is considered **code**.
 //!
-//! For a `Cons` to be considered **code**, it must be a *list* and must also 
-//! start with a symbol that is **code**.
+//! For a [`Cons`][Cons] to be considered **code**, it must be a *list* and must
+//! also start with a symbol that is **code**.
 //!
 //! ## Depth
 //!
-//! * The *depth* of an `Symbol, `Int`, `Str`, `Float`, or `Nil` is 0.
-//! * The *depth* of a `Cons` is the greater of the depth of the *left* value
-//!   + 1 or the depth of the *right* value.
+//! * The *depth* of an [`Symbol`][Symbol], [`Int`][Int], [`Str`][Str],
+//!   [`Float`][Float], or [`Nil`][Nil] is zero.
+//! * The *depth* of a [`Cons`][Cons] is the greater of the one more than the
+//!   depth of the *left* value and the depth of the *right* value.
 //!
 //! # Displaying Values
 //!
-//! * A `Cons` that is **data** is rendered such that
-//!   * the *root* starts with the opening brace followed by its *left* value.
-//!   * If the *left* value
-//!     * is a `Cons`, it is displayed with its opening brace followed by its 
-//!       left value across 
-//!       * a single line if it has a *depth* of 1, or 
-//!       * across multiple lines if it has a *depth* of more than 1, otherwise
-//!     * is rendered as normal.
-//!   * If the *right* value
-//!     * is a `Cons`, it is displayed a
+//! A *stop* is the string to use for indentation; either some number of
+//! spaces or a single tab.
+//!   
+//! A [`Symbol`][Symbol] is rendered as a string, with all tokens and special
+//! characters escaped with a leading backslash (`'\'`).
 //!
-//!   * If the *right* value is a `Nil`, the *left* value is displayed on
-//!     the current line followed immediately by a closing brace.
-//!   * If the *right* value is a `Cons`:
-//!     * With a depth of 1, it is displayed
+//! A [`Str`][Str] is rendered as being escaped and between a pair of double
+//! quotes and must also be valid unnicode.
 //!
-//! * *Lists* that are **data** and *cons trees* that are *list-like* with a 
-//!   depth of 1 are displayed on a single line.
+//! An [`Int`][Int] is rendered as a decimal value with no fractional part or
+//! decimal point.
 //!
-//!   ```listp
-//!   (data on a single line)
-//!   (cons on a single . line)
-//!   (this
-//!     has
-//!     a
-//!     (depth) of two)
-//!   ```
+//! A [`Float`][Float] is rendered as a decimal value with a decimal point and
+//! the least number of digits in the fractional part needed to accurately
+//! represent the value, always using at least one digit for the fractional
+//! part.
 //!
-//! * *Lists* that are **data** and *cons trees* that are *list-like* with a 
-//!   depth greater than 1 are displayed across multiple lines with each value 
-//!   on a different line and with the last value followed by the closing brace.
-//!   *Cons-trees* have the cons-join on the same line as the last argument.
+//! A [`Cons`][Cons] is rendered such that:
 //!
-//!   ```lisp
-//!   (I
-//!       am
-//!       (data across many)
-//!       lines)
-//!   (I
-//!       am
-//!       (a . cons)
-//!       (data across many)
-//!       . lines)
-//!   (I am a cons . tree)
-//!               . a)
-//!           . cons)
-//!       . tree)
+//! * if it has a *depth* of one, all values are rendered on a single line
+//!   with a *value separator* of a single space (`' '`), otherwise
+//! * all values are rendered on a new line, with a *value separator* of a
+//!   new line character (`'\n'`) followed by a number of *stops* equal to 
+//!   the number of *left* branches are taken to get to the value from the 
+//!   *root*
+//!   * except for the number of elements at the start of a *list* that is
+//!     **code** that the [`Symbol`][Symbol] reuires to be on the first line;
+//! * The first value in a *list* or *tree* is rendered immediately after an 
+//!   opening brace (`'('`),
+//! * if the value on the right is a [`Cons`][Cons], then it is instead rendered
+//!   such that a *value separator* is rendered in place of an opening brace
+//!   followed by its contents. 
+//! * if the value on the right is a [`Nil`][Nil] then a close brace (`')'`) is 
+//!   rendered, otherwise
+//! * the value on the right is rendered after a *value separator* and a *cons
+//!   join* (a period followed by a space, i.e. `". "`)
 //!
-//!   (a . b)
-//!   ((a . b)
-//!     . b)
-//!   ```
+//! # Examples
+// TODO Add some examples that work as tests
 //!
-//! * *Lists* that are **code** are rendered based on the `Layout` of the
-//!   symbol at the start of the list.
-//!   * If the `Layout::always_multiline` is true, then the block will always
-//!     be split across multiple lines, otherwise it will only be split if
-//!     the depth of the list is greater than 1.
-//!   * `Layout::
-//!   * If it is **code**, the `Layout` of the first symbol will be consulted.
-//!     * `Layout::with_n_args` determines how many elements share the first
-//!       line with the first symbol.
-//!     * 
+//! ```lisp
+//! (data on a single line)
+//! (cons on a single . line)
+//! (I
+//!     am
+//!     (data across many)
+//!     lines)
+//! (I
+//!   am
+//!   (a . cons)
+//!   (with data across many)
+//!   . lines)
+//! ((((I am a cons . tree)
+//!       . a)
+//!     . cons)
+//!   . tree)
+//! (a . b)
+//! ((a . b)
+//!   . b)
+//!
+//! ; Example of potential LISP
+//! (begin
+//!   (let a 12)
+//!   (let b 13)
+//!   (let c 
+//!     (fold +
+//!       '(1 2 3 4 5 6 7)))
+//!   (+ a b c))
+//! ```
+//!
+//! [Nil]: ../enum.Value.html#variant.Nil
+//! [Symbol]: ../enum.Value.html#variant.Symbol
+//! [Str]: ../enum.Value.html#variant.Str
+//! [Int]: ../enum.Value.html#variant.Int
+//! [Float]: ../enum.Value.html#variant.Float
+//! [Cons]: ../enum.Value.html#variant.Cons
+//! [Data]: ../enum.Value.html#variant.Data
+//! [Code]: ../enum.Value.html#variant.Code
 
 #![deny(missing_docs)]
 #![deny(unsafe_code)]
@@ -121,7 +147,7 @@ impl<S> Classify for Value<S> {
 
 
 /**
- * Inform the printer of how render *code*.
+ * Inform the printer of how render **code**.
  *
  * A type used for `Symbol` **must** implement this trait in order to be pretty
  * printed. It informs the displays of how cons lists should be rendered.
@@ -262,13 +288,13 @@ impl<'a, 'b, S> PrettyValue<'a, S> {
     }
 
     /// Create a child
-    fn create_child(&self, child: &'b Value<S>) -> PrettyValue<'b, S> {
+    fn create_child(&self, child: &'b Value<S>, indent: bool) -> PrettyValue<'b, S> {
         let level = self.level + 1;
         PrettyValue {
             value: child,
             data: self.data,
             stop: self.stop,
-            level: level,
+            level: level + if indent {1} else {0},
             single_line: self.single_line,
         }
     }
@@ -329,7 +355,7 @@ impl<'a, Sym: ToString + Layout> PrettyValue<'a, Sym> {
     fn pretty_cons(&self, f: &mut Formatter, left: &Value<Sym>, right: &Value<Sym>) 
         -> Result<(), fmt::Error> {
         // Open Braces and display left
-        try!(write!(f, "({}", self.create_child(left)));
+        try!(write!(f, "({}", self.create_child(left, true)));
 
         // Display list
         let mut next = right;
@@ -344,7 +370,7 @@ impl<'a, Sym: ToString + Layout> PrettyValue<'a, Sym> {
                     try!(write!(f, 
                         "{}{}", 
                         self.next_sep(args), 
-                        self.create_child(left.as_ref())
+                        self.create_child(left.as_ref(), true)
                     ));
                     next = right.as_ref();
                     args += 1;
@@ -353,7 +379,7 @@ impl<'a, Sym: ToString + Layout> PrettyValue<'a, Sym> {
                     return write!(f, 
                         "{}. {})", 
                         self.next_sep(args), 
-                        self.create_child(next.as_ref())
+                        self.create_child(next.as_ref(), true)
                     );
                 }
             }
@@ -372,7 +398,7 @@ impl<'a, Sym> Display for PrettyValue<'a, Sym> where Sym: Layout + ToString {
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
         match *self.value {
             Value::Data(ref v) => {
-                let child = self.create_child(v.as_ref()).as_data();
+                let child = self.create_child(v.as_ref(), false).as_data();
                 if self.data {
                     // Don't annotate if already data
                     write!(f, "{}", child)
@@ -385,7 +411,7 @@ impl<'a, Sym> Display for PrettyValue<'a, Sym> where Sym: Layout + ToString {
                 }
             },
             Value::Code(ref v) => {
-                let child = self.create_child(v.as_ref()).as_code();
+                let child = self.create_child(v.as_ref(), false).as_code();
                 if self.data {
                     // Annotate if in data block
                     write!(f, ",{}", child)
