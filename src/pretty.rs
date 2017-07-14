@@ -18,8 +18,9 @@
 //! ## Code versus Data
 //!
 //! For a [`Symbol`][Symbol] to be considered **code**, it must be explicitly
-//! marked as **code** when it is in a **data** block. If a [`Symbol`][Symbol]
-//! is not inside a **data** block, it is considered **code**.
+//! marked as [`Code`][Code] when it is in a **data** block. If a
+//! [`Symbol`][Symbol] is not inside a **data** block, it is considered
+//! **code**.
 //!
 //! For a [`Cons`][Cons] to be considered **code**, it must be a *list* and must
 //! also start with a symbol that is **code**.
@@ -69,6 +70,16 @@
 //!   rendered, otherwise
 //! * the value on the right is rendered after a *value separator* and a *cons
 //!   join* (a period followed by a space, i.e. `". "`)
+//!
+//! A [`Data`][Data] is rendered such that:
+//!   
+//! * if it not inside a [`Data`][Data] block:
+//!   * and there are any children that are [`Code`][Code], the tagged value os
+//!     prefixed with the ```'`'``` annotation, otherwise
+//!   * the tagged value is prefixed with the `'\''` annotation
+//!
+//! A [`Code`][Code] is rendered such that, if it is in a [`Data`][Data] block,
+//! the tagged value is prefixed with the `','` annotation.
 //!
 //! # Examples
 // TODO Add some examples that work as tests
@@ -434,6 +445,10 @@ impl<'a, Sym> Debug for PrettyValue<'a, Sym> where Sym: Layout + ToString {
         write!(f, "{}", self)
     }
 }
+
+/*
+ * TODO Add more roubust tests
+ */
 
 #[test]
 fn pretty_basic() {
