@@ -5,9 +5,9 @@
 //!
 //! Printing a value prettily is as simple as calling
 //! [`pretty`](trait.Pretty.html#method.pretty) on a
-//! [`Value`](../enum.Value.html) with the [`Pretty`](trait.Pretty.html) in
-//! scope.  The value used to represent a [`Symbol`][Symbol] must implement the
-//! [`Layout`](trait.Layout.html) trait for this to work, however.
+//! [`Value`](../enum.Value.html) with the [`Pretty`](trait.Pretty.html) trait
+//! in scope, hoever, the value used to represent a [`Symbol`][Symbol] must implement
+//! the [`Layout`](trait.Layout.html) trait for this to work.
 //!
 //! # Defining Values
 //!
@@ -41,7 +41,7 @@
 //! characters escaped with a leading backslash (`'\'`).
 //!
 //! A [`Str`][Str] is rendered as being escaped and between a pair of double
-//! quotes and must also be valid unnicode.
+//! quotes and are encoded as UTF-8.
 //!
 //! An [`Int`][Int] is rendered as a decimal value with no fractional part or
 //! decimal point.
@@ -49,7 +49,8 @@
 //! A [`Float`][Float] is rendered as a decimal value with a decimal point and
 //! the least number of digits in the fractional part needed to accurately
 //! represent the value, always using at least one digit for the fractional
-//! part.
+//! part. All other variants are rendered in the same manner as
+//! `Float::to_string()`.
 //!
 //! A [`Cons`][Cons] is rendered such that:
 //!
